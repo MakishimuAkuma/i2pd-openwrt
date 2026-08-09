@@ -20,7 +20,6 @@ jobs:
         run: |
           mkdir -p action/i2pd
           cp i2pd/Makefile action/i2pd/
-          cp -r i2pd/files action/i2pd/
 
       - name: Build Packages via OpenWrt SDK
         uses: openwrt/gh-action-sdk@main
