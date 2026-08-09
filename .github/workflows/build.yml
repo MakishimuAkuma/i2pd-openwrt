@@ -19,7 +19,7 @@ jobs:
       - name: Build Packages via OpenWrt SDK
         uses: openwrt/gh-action-sdk@main
         env:
-          ARCH: aarch64_cortex-a55-25.12.0
+          ARCH: rockchip-armv8-25.12.5
           NO_DEFAULT_FEEDS: 0
           PACKAGES: i2pd
           V: s
