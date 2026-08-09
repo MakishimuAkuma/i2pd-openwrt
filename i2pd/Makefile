@@ -17,7 +17,6 @@ PKG_BUILD_PARALLEL:=1
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL:=https://github.com/PurpleI2P/i2pd
 PKG_SOURCE:=$(PKG_VERSION).tar.gz
-PKG_SOURCE_VERSION:=$(PKG_VERSION)
 PKG_MIRROR_HASH:=skip
 
 PKG_MAINTAINER:=David Yang <mmyangfl@gmail.com>
