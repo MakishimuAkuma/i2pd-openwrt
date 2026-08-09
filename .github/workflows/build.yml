@@ -1,0 +1,45 @@
+name: Build i2pd and Upload to Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build and Release i2pd
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build Packages via OpenWrt SDK
+        uses: openwrt/gh-action-sdk@main
+        env:
+          ARCH: aarch64_cortex-a55-25.12.0
+          NO_DEFAULT_FEEDS: 0
+          PACKAGES: i2pd
+          V: s
+
+      - name: Generate Tag Name
+        id: tag
+        run: |
+          TAG_NAME="v$(date +'%Y.%m.%d-%H%M')"
+          echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Create Release and Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag_name }}
+          name: i2pd Build ${{ steps.tag.outputs.tag_name }}
+          body: |
+          draft: false
+          prerelease: false
+          # Шаблон поиска подхватит все скомпилированные .ipk пакеты в директории сборки
+          files: |
+            bin/packages/*/action/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
