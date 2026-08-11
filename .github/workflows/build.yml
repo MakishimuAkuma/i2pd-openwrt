@@ -31,6 +31,9 @@ jobs:
           EXTRA_COMMANDS: |
             echo "CONFIG_DOWNLOAD_CHECK_CERTIFICATE=n" >> .config
             sed -i 's/CONFIG_DOWNLOAD_CHECK_CERTIFICATE=y/CONFIG_DOWNLOAD_CHECK_CERTIFICATE=n/g' .config || true
+            make package/feeds/base/zlib/compile -j$(nproc)
+            make package/feeds/base/openssl/compile -j$(nproc)
+            make package/feeds/packages/boost/compile -j$(nproc)
 
       - name: Generate Tag Name
         id: tag
