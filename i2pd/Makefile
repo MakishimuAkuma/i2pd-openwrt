@@ -56,7 +56,11 @@ CMAKE_OPTIONS += \
 	-DWITH_LIBRARY=OFF \
 	-DWITH_STATIC=OFF \
 	-DWITH_UPNP=OFF \
-	-DWITH_HARDENING=ON
+	-DWITH_HARDENING=ON \
+	-DBoost_NO_SYSTEM_PATHS=ON \
+	-DBOOST_ROOT=$(STAGING_DIR)/usr \
+	-DBoost_INCLUDE_DIR=$(STAGING_DIR)/usr/include \
+	-DBoost_LIBRARY_DIRS=$(STAGING_DIR)/usr/lib
 
 define Package/i2pd/conffiles
 /etc/config/i2pd
