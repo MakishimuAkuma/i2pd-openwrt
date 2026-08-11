@@ -34,6 +34,7 @@ jobs:
             make defconfig
             make package/feeds/base/zlib/install -j$(nproc)
             make package/feeds/base/openssl/install -j$(nproc)
+            make package/feeds/packages/boost-headers/install -j$(nproc)
             make package/feeds/packages/boost/install -j$(nproc)
 
       - name: Generate Tag Name
