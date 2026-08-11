@@ -26,7 +26,7 @@ PKG_LICENSE:=BSD-3-Clause
 PKG_LICENSE_FILES:=LICENSE
 PKG_CPE_ID:=cpe:/a:i2pd:i2pd
 
-PKG_BUILD_DEPENDS:=boost
+PKG_BUILD_DEPENDS:=boost openssl zlib
 
 include $(INCLUDE_DIR)/package.mk
 
