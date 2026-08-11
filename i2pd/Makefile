@@ -45,14 +45,16 @@ define Package/i2pd/description
   don't reveal their real IP addresses.
 endef
 
-TARGET_LDFLAGS+=-latomic
+TARGET_LDFLAGS+=-latomic -L$(STAGING_DIR)/usr/lib
 
+# ВАЖНО: Принудительно прописываем -I$(STAGING_DIR)/usr/include. 
+# Это заставит компилятор заглянуть в общую папку SDK, куда EXTRA_COMMANDS скомпилировал библиотеки.
 define Build/Compile
-	$(MAKE) -C $(PKG_BUILD_DIR) -f Makefile \
+	$(MAKE) -C $(PKG_BUILD_DIR) -f Makefile.linux \
 		CC="$(TARGET_CC)" \
 		CXX="$(TARGET_CXX)" \
-		CFLAGS="$(TARGET_CFLAGS) $(TARGET_CPPFLAGS)" \
-		CXXFLAGS="$(TARGET_CXXFLAGS) $(TARGET_CPPFLAGS)" \
+		CFLAGS="$(TARGET_CFLAGS) $(TARGET_CPPFLAGS) -I$(STAGING_DIR)/usr/include" \
+		CXXFLAGS="$(TARGET_CXXFLAGS) $(TARGET_CPPFLAGS) -I$(STAGING_DIR)/usr/include" \
 		LDFLAGS="$(TARGET_LDFLAGS)" \
 		USE_STATIC=OFF \
 		USE_AESNI=OFF \
