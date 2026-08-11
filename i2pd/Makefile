@@ -46,7 +46,7 @@ define Package/i2pd/description
   don't reveal their real IP addresses.
 endef
 
-TARGET_LDFLAGS+=-latomic
+TARGET_LDFLAGS+=-latomic -L$(STAGING_DIR)/usr/lib
 
 OOCM_DIR:=build
 CMAKE_SOURCE_DIR:=$(PKG_BUILD_DIR)/build
@@ -57,6 +57,7 @@ CMAKE_OPTIONS += \
 	-DWITH_STATIC=OFF \
 	-DWITH_UPNP=OFF \
 	-DWITH_HARDENING=ON \
+	-DWITH_BOOST=ON \
 	-DBoost_NO_SYSTEM_PATHS=ON \
 	-DBOOST_ROOT=$(STAGING_DIR)/usr \
 	-DBoost_INCLUDE_DIR=$(STAGING_DIR)/usr/include \
