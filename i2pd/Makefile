@@ -47,6 +47,18 @@ endef
 
 TARGET_LDFLAGS+=-latomic
 
+define Build/Compile
+	$(MAKE) -C $(PKG_BUILD_DIR) -f Makefile.linux \
+		CC="$(TARGET_CC)" \
+		CXX="$(TARGET_CXX)" \
+		CFLAGS="$(TARGET_CFLAGS) $(TARGET_CPPFLAGS)" \
+		CXXFLAGS="$(TARGET_CXXFLAGS) $(TARGET_CPPFLAGS)" \
+		LDFLAGS="$(TARGET_LDFLAGS)" \
+		USE_STATIC=OFF \
+		USE_AESNI=OFF \
+		USE_AVX=OFF
+endef
+
 define Package/i2pd/conffiles
 /etc/config/i2pd
 /etc/i2pd/i2pd.conf
