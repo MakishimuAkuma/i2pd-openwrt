@@ -26,7 +26,7 @@ jobs:
         env:
           ARCH: rockchip-armv8-25.12.5
           NO_DEFAULT_FEEDS: 0
-          PACKAGES: i2pd-git
+          PACKAGES: i2pd
           V: s
           EXTRA_COMMANDS: |
             echo "CONFIG_DOWNLOAD_CHECK_CERTIFICATE=n" >> .config
