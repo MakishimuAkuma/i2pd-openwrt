@@ -19,7 +19,7 @@ jobs:
       - name: Prepare Package for SDK
         run: |
           mkdir -p action
-          cp -r i2pd-git action/
+          cp -r i2pd action/
 
       - name: Build Packages via OpenWrt SDK
         uses: openwrt/gh-action-sdk@main
