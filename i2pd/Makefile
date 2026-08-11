@@ -29,6 +29,7 @@ PKG_CPE_ID:=cpe:/a:i2pd:i2pd
 PKG_BUILD_DEPENDS:=boost openssl zlib
 
 include $(INCLUDE_DIR)/package.mk
+include $(INCLUDE_DIR)/cmake.mk
 
 define Package/i2pd
 	SECTION:=net
@@ -45,19 +46,17 @@ define Package/i2pd/description
   don't reveal their real IP addresses.
 endef
 
-TARGET_LDFLAGS+=-latomic -L$(STAGING_DIR)/usr/lib
+TARGET_LDFLAGS+=-latomic
 
-define Build/Compile
-	$(MAKE) -C $(PKG_BUILD_DIR)/build -f Makefile.linux \
-		CC="$(TARGET_CC)" \
-		CXX="$(TARGET_CXX)" \
-		CFLAGS="$(TARGET_CFLAGS) $(TARGET_CPPFLAGS) -I$(STAGING_DIR)/usr/include" \
-		CXXFLAGS="$(TARGET_CXXFLAGS) $(TARGET_CPPFLAGS) -I$(STAGING_DIR)/usr/include" \
-		LDFLAGS="$(TARGET_LDFLAGS)" \
-		USE_STATIC=OFF \
-		USE_AESNI=OFF \
-		USE_AVX=OFF
-endef
+OOCM_DIR:=build
+CMAKE_SOURCE_DIR:=$(PKG_BUILD_DIR)/build
+
+CMAKE_OPTIONS += \
+	-DWITH_BINARY=ON \
+	-DWITH_LIBRARY=OFF \
+	-DWITH_STATIC=OFF \
+	-DWITH_UPNP=OFF \
+	-DWITH_HARDENING=ON
 
 define Package/i2pd/conffiles
 /etc/config/i2pd
