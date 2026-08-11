@@ -16,7 +16,7 @@ PKG_BUILD_PARALLEL:=1
 
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL:=https://github.com/PurpleI2P/i2pd
-PKG_SOURCE:=openssl
+PKG_SOURCE_VERSION:=openssl
 PKG_SOURCE_SUBDIR:=$(PKG_NAME)-$(PKG_VERSION)
 PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.gz
 PKG_MIRROR_HASH:=f568cc4e4ab97152cbecf017768295c5aa6498d636ff08d082bdf3db4a624a84
@@ -34,7 +34,7 @@ include $(INCLUDE_DIR)/cmake.mk
 define Package/i2pd
 	SECTION:=net
 	CATEGORY:=Network
-	DEPENDS:=+libopenssl +boost +boost-program_options +libatomic +zlib
+	DEPENDS:=+libopenssl +boost +boost-program_options +boost-filesystem +boost-system +libstdcpp +zlib +libatomic
 	TITLE:=full-featured C++ implementation of I2P client
 	URL:=https://github.com/PurpleI2P/i2pd
 	USERID:=i2pd:i2pd
@@ -72,7 +72,7 @@ endef
 
 define Package/i2pd/install
 	$(INSTALL_DIR) $(1)/usr/bin
-	$(INSTALL_BIN) $(PKG_BUILD_DIR)/i2pd $(1)/usr/bin
+	$(INSTALL_BIN) $(PKG_INSTALL_DIR)/usr/bin/i2pd $(1)/usr/bin
 	$(INSTALL_DIR) $(1)/etc/init.d
 	$(INSTALL_BIN) ./files/i2pd.init $(1)/etc/init.d/i2pd
 	$(INSTALL_DIR) $(1)/usr/share/i2pd
@@ -82,7 +82,6 @@ define Package/i2pd/install
 	$(INSTALL_DIR) $(1)/etc/i2pd
 	$(INSTALL_DATA) $(PKG_BUILD_DIR)/contrib/i2pd.conf $(1)/etc/i2pd
 	$(INSTALL_DATA) $(PKG_BUILD_DIR)/contrib/tunnels.conf $(1)/etc/i2pd
-	# subscriptions.txt deprecated, see #8088
 	$(INSTALL_DIR) $(1)/etc/i2pd/tunnels.d
 	$(INSTALL_DATA) $(PKG_BUILD_DIR)/contrib/tunnels.d/README $(1)/etc/i2pd/tunnels.d
 endef
