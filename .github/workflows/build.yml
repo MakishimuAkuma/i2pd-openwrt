@@ -1,11 +1,11 @@
-name: Build i2pd and Upload to Release
+name: Build i2pd OpenSSL
 
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    name: Build and Release i2pd
+    name: Build and Release
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -15,31 +15,34 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Override Feed Package
+          
+      - name: Prepare Package for SDK
         run: |
-          mkdir -p action/i2pd
-          cp i2pd/Makefile action/i2pd/
+          mkdir -p action
+          cp -r i2pd-git action/
 
       - name: Build Packages via OpenWrt SDK
         uses: openwrt/gh-action-sdk@main
         env:
           ARCH: rockchip-armv8-25.12.5
           NO_DEFAULT_FEEDS: 0
-          PACKAGES: i2pd
+          PACKAGES: i2pd-git
           V: s
+          EXTRA_COMMANDS: |
+            echo "CONFIG_DOWNLOAD_CHECK_CERTIFICATE=n" >> .config
+            sed -i 's/CONFIG_DOWNLOAD_CHECK_CERTIFICATE=y/CONFIG_DOWNLOAD_CHECK_CERTIFICATE=n/g' .config || true
 
       - name: Generate Tag Name
         id: tag
         run: |
-          TAG_NAME="v$(date +'%Y.%m.%d-%H%M')"
+          TAG_NAME="openssl-git-v$(date +'%Y.%m.%d-%H%M')"
           echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
 
       - name: Create Release and Upload Assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.tag_name }}
-          name: i2pd Build ${{ steps.tag.outputs.tag_name }}
+          name: i2pd OpenSSL Git Build ${{ steps.tag.outputs.tag_name }}
           body: |
           draft: false
           prerelease: false
