@@ -1,56 +1,67 @@
-name: Build i2pd OpenSSL with Boost
+name: Build i2pd OpenWrt APK
 
 on:
+  release:
+    types:
+      - published
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
-    name: Build and Release
+    name: Build i2pd for rockchip-armv8
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
 
     steps:
-      - name: Checkout Source Code
+      - name: Checkout package feed
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          
-      - name: Prepare Package for SDK
-        run: |
-          mkdir -p action
-          cp -r i2pd action/
 
-      - name: Build Packages via OpenWrt SDK
+      - name: Check release version
+        if: github.event_name == 'release'
+        run: |
+          echo "Release tag: ${{ github.event.release.tag_name }}"
+
+          if [ "${{ github.event.release.tag_name }}" != "2.61.0" ]; then
+            echo "This workflow is only for i2pd 2.61.0"
+            exit 1
+          fi
+
+      - name: Build OpenWrt package
         uses: openwrt/gh-action-sdk@main
         env:
-          ARCH: rockchip-armv8-25.12.5
-          NO_DEFAULT_FEEDS: 0
+          ARCH: rockchip-armv8
           PACKAGES: i2pd
-          V: s
-          EXTRA_COMMANDS: |
-            echo "CONFIG_DOWNLOAD_CHECK_CERTIFICATE=n" >> .config
-            sed -i 's/CONFIG_DOWNLOAD_CHECK_CERTIFICATE=y/CONFIG_DOWNLOAD_CHECK_CERTIFICATE=n/g' .config || true
-            make defconfig
-            make package/feeds/base/zlib/install -j$(nproc)
-            make package/feeds/base/openssl/install -j$(nproc)
-            make package/feeds/packages/boost-headers/install -j$(nproc)
-            make package/feeds/packages/boost/install -j$(nproc)
+          NO_REFRESH_CHECK: 1
 
-      - name: Generate Tag Name
-        id: tag
+      - name: Find generated APK
+        id: find_apk
+        shell: bash
         run: |
-          TAG_NAME="openssl-boost-v$(date +'%Y.%m.%d-%H%M')"
-          echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
+          set -e
 
-      - name: Create Release and Upload Assets
+          APK="$(find bin -type f -name 'i2pd-*.apk' | head -n 1)"
+
+          if [ -z "$APK" ]; then
+            echo "No i2pd APK found"
+            echo "Contents of bin:"
+            find bin -type f | sort
+            exit 1
+          fi
+
+          echo "Found APK: $APK"
+
+          echo "apk=$APK" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK to Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.tag.outputs.tag_name }}
-          name: i2pd OpenSSL Boost Build ${{ steps.tag.outputs.tag_name }}
-          draft: false
-          prerelease: false
+          tag_name: ${{ github.event.release.tag_name }}
           files: |
-            bin/packages/*/action/*.apk
+            ${{ steps.find_apk.outputs.apk }}
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
