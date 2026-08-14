@@ -26,6 +26,7 @@ jobs:
           ARCH: rockchip-armv8
           PACKAGES: i2pd
           NO_REFRESH_CHECK: 1
+          V: s
 
       - name: Find generated APK
         id: find_apk
