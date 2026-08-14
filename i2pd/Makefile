@@ -10,58 +10,39 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=i2pd
-PKG_VERSION:=openssl
+PKG_VERSION:=2.61.0
 PKG_RELEASE:=1
-PKG_BUILD_PARALLEL:=1
 
-PKG_SOURCE_PROTO:=git
-PKG_SOURCE_URL:=https://github.com/PurpleI2P/i2pd.git
-PKG_SOURCE_VERSION:=openssl
-PKG_SOURCE_SUBDIR:=$(PKG_NAME)-$(PKG_VERSION)
-PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.gz
-PKG_MIRROR_HASH:=f568cc4e4ab97152cbecf017768295c5aa6498d636ff08d082bdf3db4a624a84
+PKG_BUILD_PARALLEL:=1
+PKG_SOURCE:=$(PKG_VERSION).tar.gz
+PKG_SOURCE_URL:=https://github.com/PurpleI2P/i2pd/archive/refs/tags/
+PKG_SOURCE_SUBDIR:=i2pd-$(PKG_VERSION)
 
 PKG_MAINTAINER:=David Yang <mmyangfl@gmail.com>
 PKG_LICENSE:=BSD-3-Clause
 PKG_LICENSE_FILES:=LICENSE
 PKG_CPE_ID:=cpe:/a:i2pd:i2pd
 
-PKG_BUILD_DEPENDS:=boost openssl zlib
+PKG_BUILD_DEPENDS:=boost
 
 include $(INCLUDE_DIR)/package.mk
-include $(INCLUDE_DIR)/cmake.mk
 
 define Package/i2pd
 	SECTION:=net
 	CATEGORY:=Network
-	# Возвращаем зависимости для установки финального пакета apk
-	DEPENDS:=+libopenssl +boost +boost-program_options +boost-filesystem +boost-system +libatomic +zlib
+	DEPENDS:=+libopenssl +boost +boost-program_options +libatomic +zlib
 	TITLE:=full-featured C++ implementation of I2P client
-	URL:=https://github.com
+	URL:=https://github.com/PurpleI2P/i2pd
 	USERID:=i2pd:i2pd
 endef
 
 define Package/i2pd/description
-  I2P (Invisible Internet Protocol) is a universal anonymous network layer. Standard build with Boost.
+  I2P (Invisible Internet Protocol) is a universal anonymous network layer.
+  All communications over I2P are anonymous and end-to-end encrypted,
+  participants don't reveal their real IP addresses.
 endef
 
-TARGET_LDFLAGS+=-latomic -L$(STAGING_DIR)/usr/lib
-
-OOCM_DIR:=build
-CMAKE_SOURCE_DIR:=$(PKG_BUILD_DIR)/build
-
-CMAKE_OPTIONS += \
-	-DWITH_BINARY=ON \
-	-DWITH_LIBRARY=OFF \
-	-DWITH_STATIC=OFF \
-	-DWITH_UPNP=OFF \
-	-DWITH_HARDENING=ON \
-	-DWITH_BOOST=ON \
-	-DBoost_NO_SYSTEM_PATHS=ON \
-	-DBOOST_ROOT=$(STAGING_DIR)/usr \
-	-DBoost_INCLUDE_DIR=$(STAGING_DIR)/usr/include \
-	-DBoost_LIBRARY_DIRS=$(STAGING_DIR)/usr/lib \
-	-Dboost_version_hpp=$(STAGING_DIR)/usr/include/boost/version.hpp
+TARGET_LDFLAGS += -latomic
 
 define Package/i2pd/conffiles
 /etc/config/i2pd
@@ -72,18 +53,25 @@ endef
 
 define Package/i2pd/install
 	$(INSTALL_DIR) $(1)/usr/bin
-	$(INSTALL_BIN) $(PKG_INSTALL_DIR)/usr/bin/i2pd $(1)/usr/bin
+	$(INSTALL_BIN) $(PKG_BUILD_DIR)/i2pd $(1)/usr/bin
+
 	$(INSTALL_DIR) $(1)/etc/init.d
 	$(INSTALL_BIN) ./files/i2pd.init $(1)/etc/init.d/i2pd
+
 	$(INSTALL_DIR) $(1)/usr/share/i2pd
-	$(CP) $(PKG_BUILD_DIR)/contrib/certificates $(1)/usr/share/i2pd
+	$(CP) $(PKG_BUILD_DIR)/contrib/certificates $(1)/usr/share/i2pd/
+
 	$(INSTALL_DIR) $(1)/etc/config
 	$(INSTALL_CONF) ./files/i2pd.config $(1)/etc/config/i2pd
+
 	$(INSTALL_DIR) $(1)/etc/i2pd
-	$(INSTALL_DATA) $(PKG_BUILD_DIR)/contrib/i2pd.conf $(1)/etc/i2pd
-	$(INSTALL_DATA) $(PKG_BUILD_DIR)/contrib/tunnels.conf $(1)/etc/i2pd
+	$(INSTALL_DATA) $(PKG_BUILD_DIR)/contrib/i2pd.conf $(1)/etc/i2pd/
+	$(INSTALL_DATA) $(PKG_BUILD_DIR)/contrib/tunnels.conf $(1)/etc/i2pd/
+
+	# subscriptions.txt deprecated, see #8088
 	$(INSTALL_DIR) $(1)/etc/i2pd/tunnels.d
-	$(INSTALL_DATA) $(PKG_BUILD_DIR)/contrib/tunnels.d/README $(1)/etc/i2pd/tunnels.d
+	$(INSTALL_DATA) $(PKG_BUILD_DIR)/contrib/tunnels.d/README \
+		$(1)/etc/i2pd/tunnels.d/
 endef
 
 $(eval $(call BuildPackage,i2pd))
