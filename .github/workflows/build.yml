@@ -21,11 +21,57 @@ jobs:
           fetch-depth: 0
 
       - name: Build OpenWrt package
+        id: build
+        continue-on-error: true
         uses: openwrt/gh-action-sdk@main
         env:
           ARCH: rockchip-armv8
           PACKAGES: i2pd
           NO_REFRESH_CHECK: 1
+          BUILD_LOG: 1
+
+      - name: Show build errors
+        if: steps.build.outcome == 'failure'
+        shell: bash
+        run: |
+          set +e
+
+          echo "========================================"
+          echo "i2pd build failed"
+          echo "========================================"
+
+          echo
+          echo "Build log files:"
+          find logs -type f -print 2>/dev/null | sort
+
+          echo
+          echo "========================================"
+          echo "Relevant errors"
+          echo "========================================"
+
+          grep -RniE \
+            'error:|fatal error:|CMake Error|FAILED|undefined reference|No such file|not found|cannot find|recipe for target.*failed|Error [0-9]+' \
+            logs 2>/dev/null \
+            | tail -n 200 || true
+
+          echo
+          echo "========================================"
+          echo "Last 200 lines of build log"
+          echo "========================================"
+
+          LOG="$(find logs -type f -print 2>/dev/null | head -n 1)"
+
+          if [ -n "$LOG" ]; then
+            tail -n 200 "$LOG"
+          else
+            echo "No build log found"
+          fi
+
+          exit 1
+
+      - name: Check build result
+        if: steps.build.outcome == 'failure'
+        run: exit 1
 
       - name: Find generated APK
         id: find_apk
@@ -36,13 +82,15 @@ jobs:
           APK="$(find bin -type f -name 'i2pd-*.apk' | head -n 1)"
 
           if [ -z "$APK" ]; then
-            echo "No i2pd APK found"
-            echo "Contents of bin:"
-            find bin -type f | sort
+            echo "ERROR: i2pd APK was not found"
+            echo
+            echo "Generated APK files:"
+            find bin -type f -name '*.apk' | sort || true
             exit 1
           fi
 
-          echo "Found APK: $APK"
+          echo "Found APK:"
+          echo "$APK"
 
           echo "apk=$APK" >> "$GITHUB_OUTPUT"
 
