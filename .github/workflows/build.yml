@@ -30,46 +30,47 @@ jobs:
           NO_REFRESH_CHECK: 1
           BUILD_LOG: 1
 
-      - name: Show build errors
+      - name: Show i2pd build error
         if: steps.build.outcome == 'failure'
         shell: bash
         run: |
           set +e
 
-          echo "========================================"
-          echo "i2pd build failed"
-          echo "========================================"
+          LOG="logs/package/feeds/action/i2pd/compile.txt"
 
-          echo
-          echo "Build log files:"
-          find logs -type f -print 2>/dev/null | sort
-
-          echo
           echo "========================================"
-          echo "Relevant errors"
+          echo "i2pd BUILD FAILED"
           echo "========================================"
 
-          grep -RniE \
-            'error:|fatal error:|CMake Error|FAILED|undefined reference|No such file|not found|cannot find|recipe for target.*failed|Error [0-9]+' \
-            logs 2>/dev/null \
-            | tail -n 200 || true
-
-          echo
-          echo "========================================"
-          echo "Last 200 lines of build log"
-          echo "========================================"
-
-          LOG="$(find logs -type f -print 2>/dev/null | head -n 1)"
-
-          if [ -n "$LOG" ]; then
-            tail -n 200 "$LOG"
-          else
-            echo "No build log found"
+          if [ ! -f "$LOG" ]; then
+            echo "i2pd compile log not found:"
+            echo "$LOG"
+            echo
+            echo "Available i2pd logs:"
+            find logs -path '*i2pd*' -type f -print 2>/dev/null | sort
+            exit 1
           fi
+
+          echo
+          echo "========================================"
+          echo "i2pd errors"
+          echo "========================================"
+
+          grep -nEi \
+            'error:|fatal error:|CMake Error|FAILED|undefined reference|cannot find|No such file|not found' \
+            "$LOG" \
+            | tail -n 100 || true
+
+          echo
+          echo "========================================"
+          echo "Last 250 lines of i2pd compile log"
+          echo "========================================"
+
+          tail -n 250 "$LOG"
 
           exit 1
 
-      - name: Check build result
+      - name: Stop if build failed
         if: steps.build.outcome == 'failure'
         run: exit 1
 
@@ -84,7 +85,7 @@ jobs:
           if [ -z "$APK" ]; then
             echo "ERROR: i2pd APK was not found"
             echo
-            echo "Generated APK files:"
+            echo "Available APK files:"
             find bin -type f -name '*.apk' | sort || true
             exit 1
           fi
