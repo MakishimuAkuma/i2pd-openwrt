@@ -20,15 +20,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check release version
-        if: github.event_name == 'release'
+      - name: Download source
         run: |
-          echo "Release tag: ${{ github.event.release.tag_name }}"
+          VERSION="${{ github.event.release.tag_name }}"
+          curl -L -o "${VERSION}.tar.gz" "https://github.com/PurpleI2P/i2pd/archive/refs/tags/${VERSION}.tar.gz"
+          SHA256=$(sha256sum "${VERSION}.tar.gz" | cut -d ' ' -f1)
+          echo "SHA256=${SHA256}"
 
-          if [ "${{ github.event.release.tag_name }}" != "2.61.0" ]; then
-            echo "This workflow is only for i2pd 2.61.0"
-            exit 1
-          fi
+      - name: Update Makefile hash
+        run: |
+          VERSION="${{ github.event.release.tag_name }}"
+          SHA256=$(sha256sum "${VERSION}.tar.gz" | cut -d ' ' -f1)
+          sed -i "s/^PKG_HASH:=.*/PKG_HASH:=${SHA256}/" Makefile
 
       - name: Build OpenWrt package
         uses: openwrt/gh-action-sdk@main
