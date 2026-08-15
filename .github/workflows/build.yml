@@ -20,12 +20,10 @@ jobs:
         arch:
           - arm_cortex-a7
           - arm_cortex-a9
-          - arm_cortex-a15
           - aarch64_cortex-a53
           - aarch64_cortex-a72
           - rockchip-armv8
           - aarch64_generic
-          - i386_generic
           - x86_64
           - mipsel_24kc
           - mips_mips32
