@@ -11,21 +11,47 @@ permissions:
 
 jobs:
   build:
-    name: Build i2pd for rockchip-armv8
+    name: Build i2pd (${{ matrix.arch }})
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - arm_cortex-a7
+          - arm_cortex-a9
+          - arm_cortex-a15
+          - aarch64_cortex-a53
+          - aarch64_cortex-a72
+          - rockchip-armv8
+          - aarch64_generic
+          - i386_generic
+          - x86_64
+          - mipsel_24kc
+          - mips_mips32
+          - mips64_mips64r2
+          - riscv64_generic
 
     steps:
       - name: Checkout package feed
         uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
+
+      - name: Verify package
+        run: |
+          echo "Architecture: ${{ matrix.arch }}"
+          echo
+          grep -E '^PKG_(NAME|VERSION|RELEASE|SOURCE|SOURCE_SUBDIR|HASH):' \
+            i2pd/Makefile
 
       - name: Build OpenWrt package
         id: build
         continue-on-error: true
         uses: openwrt/gh-action-sdk@main
         env:
-          ARCH: rockchip-armv8
+          ARCH: ${{ matrix.arch }}
           PACKAGES: i2pd
           NO_REFRESH_CHECK: 1
           BUILD_LOG: 1
@@ -40,13 +66,12 @@ jobs:
 
           echo "========================================"
           echo "i2pd BUILD FAILED"
+          echo "ARCH: ${{ matrix.arch }}"
           echo "========================================"
 
           if [ ! -f "$LOG" ]; then
             echo "i2pd compile log not found:"
             echo "$LOG"
-            echo
-            echo "Available i2pd logs:"
             find logs -path '*i2pd*' -type f -print 2>/dev/null | sort
             exit 1
           fi
@@ -63,7 +88,7 @@ jobs:
 
           echo
           echo "========================================"
-          echo "Last 250 lines of i2pd compile log"
+          echo "Last 250 lines"
           echo "========================================"
 
           tail -n 250 "$LOG"
@@ -74,33 +99,40 @@ jobs:
         if: steps.build.outcome == 'failure'
         run: exit 1
 
-      - name: Find generated APK
+      - name: Find generated APKs
         id: find_apk
         shell: bash
         run: |
           set -e
 
-          APK="$(find bin -type f -name 'i2pd-*.apk' | head -n 1)"
+          echo "Generated i2pd APKs:"
 
-          if [ -z "$APK" ]; then
-            echo "ERROR: i2pd APK was not found"
-            echo
-            echo "Available APK files:"
-            find bin -type f -name '*.apk' | sort || true
+          find bin \
+            -type f \
+            -name 'i2pd-*.apk' \
+            -print | sort
+
+          APK_COUNT="$(find bin -type f -name 'i2pd-*.apk' | wc -l)"
+
+          if [ "$APK_COUNT" -eq 0 ]; then
+            echo "ERROR: no i2pd APK found"
             exit 1
           fi
 
-          echo "Found APK:"
-          echo "$APK"
-
-          echo "apk=$APK" >> "$GITHUB_OUTPUT"
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: i2pd-${{ matrix.arch }}
+          path: |
+            bin/**/i2pd-*.apk
+          if-no-files-found: error
 
       - name: Upload APK to Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.release.tag_name }}
           files: |
-            ${{ steps.find_apk.outputs.apk }}
+            bin/**/i2pd-*.apk
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
