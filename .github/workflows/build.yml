@@ -4,7 +4,6 @@ on:
   release:
     types:
       - published
-
   workflow_dispatch:
     inputs:
       release_tag:
@@ -28,27 +27,18 @@ jobs:
 
       matrix:
         arch:
-          # ARM 32-bit
           - arm_cortex-a7
           - arm_cortex-a9
           - arm_cortex-a15_neon-vfpv4
-
-          # ARM64
           - aarch64_cortex-a53
           - aarch64_cortex-a72
           - rockchip-armv8
           - aarch64_generic
-
-          # x86
           - i386_pentium4
           - x86_64
-
-          # MIPS
           - mipsel_24kc
           - mips_mips32
           - mips64_octeonplus
-
-          # RISC-V
           - riscv64_generic
 
     steps:
@@ -65,20 +55,16 @@ jobs:
 
           echo "========================================"
           echo "Architecture: ${{ matrix.arch }}"
-          echo "OpenWrt:      ${{ env.OPENWRT_BRANCH }}"
+          echo "SDK:          ${{ matrix.arch }}-${{ env.OPENWRT_BRANCH }}"
           echo "========================================"
 
           test -f i2pd/Makefile
 
-          echo
-          echo "Package Makefile:"
           grep -E \
-            '^PKG_(NAME|VERSION|RELEASE|BUILD_PARALLEL|SOURCE|SOURCE_URL|SOURCE_SUBDIR|HASH):' \
+            '^PKG_(NAME|VERSION|RELEASE|SOURCE|SOURCE_URL|SOURCE_SUBDIR|HASH):' \
             i2pd/Makefile
 
       - name: Build OpenWrt package
-        id: build
-        continue-on-error: true
         uses: openwrt/gh-action-sdk@main
         env:
           ARCH: ${{ matrix.arch }}-${{ env.OPENWRT_BRANCH }}
@@ -86,180 +72,3 @@ jobs:
           FEEDNAME: action
           NO_REFRESH_CHECK: 1
           BUILD_LOG: 1
-          ARTIFACTS_DIR: ${{ github.workspace }}/artifacts
-
-      - name: Collect build logs
-        if: always()
-        shell: bash
-        run: |
-          set +e
-
-          mkdir -p diagnostic
-
-          echo "========================================" | tee diagnostic/result.txt
-          echo "Architecture: ${{ matrix.arch }}" | tee -a diagnostic/result.txt
-          echo "OpenWrt:      ${{ env.OPENWRT_BRANCH }}" | tee -a diagnostic/result.txt
-          echo "Build result: ${{ steps.build.outcome }}" | tee -a diagnostic/result.txt
-          echo "========================================" | tee -a diagnostic/result.txt
-
-          echo
-          echo "=== artifacts ===" | tee -a diagnostic/result.txt
-          find artifacts -type f -print 2>/dev/null \
-            | sort \
-            | tee -a diagnostic/result.txt || true
-
-          echo
-          echo "=== logs ===" | tee -a diagnostic/result.txt
-          find logs -type f -print 2>/dev/null \
-            | sort \
-            | tee -a diagnostic/result.txt || true
-
-          echo
-          echo "=== i2pd logs ===" | tee -a diagnostic/result.txt
-          find artifacts logs -type f \
-            \( -iname '*i2pd*' -o -iname '*compile*.txt' \) \
-            -print 2>/dev/null \
-            | sort \
-            | tee -a diagnostic/result.txt || true
-
-          # Save every available text log, but do not dump it to Actions stdout.
-          find artifacts logs -type f \
-            \( -name '*.txt' -o -name '*.log' \) \
-            -print 2>/dev/null \
-            | while read -r file; do
-                safe_name="$(echo "$file" | sed 's#[/]#_#g')"
-                cp "$file" "diagnostic/$safe_name" 2>/dev/null || true
-              done
-
-      - name: Upload diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: i2pd-diagnostics-${{ matrix.arch }}
-          path: diagnostic/
-          if-no-files-found: warn
-          retention-days: 7
-
-      - name: Fail build
-        if: steps.build.outcome == 'failure'
-        shell: bash
-        run: |
-          echo "i2pd build failed for ${{ matrix.arch }}"
-          echo
-          echo "Full logs are available in:"
-          echo "i2pd-diagnostics-${{ matrix.arch }}"
-          exit 1
-
-      - name: Find APK
-        id: apk
-        shell: bash
-        run: |
-          set -e
-
-          APK="$(find bin \
-            -type f \
-            -name 'i2pd-*.apk' \
-            | head -n 1)"
-
-          if [ -z "$APK" ]; then
-            echo "ERROR: i2pd APK not found"
-            echo
-            echo "Available APK files:"
-            find bin -type f -name '*.apk' -print | sort || true
-            exit 1
-          fi
-
-          echo "Found:"
-          echo "$APK"
-
-          echo "source=$APK" >> "$GITHUB_OUTPUT"
-
-      - name: Rename APK
-        id: renamed
-        shell: bash
-        run: |
-          set -e
-
-          SOURCE="${{ steps.apk.outputs.source }}"
-
-          DIR="$(dirname "$SOURCE")"
-          BASE="$(basename "$SOURCE" .apk)"
-
-          NAME="${BASE}-${{ matrix.arch }}.apk"
-          TARGET="${DIR}/${NAME}"
-
-          mv "$SOURCE" "$TARGET"
-
-          echo "APK:"
-          echo "$TARGET"
-
-          echo "path=$TARGET" >> "$GITHUB_OUTPUT"
-          echo "name=$NAME" >> "$GITHUB_OUTPUT"
-
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: i2pd-${{ matrix.arch }}
-          path: ${{ steps.renamed.outputs.path }}
-          if-no-files-found: error
-          retention-days: 7
-
-  release:
-    name: Publish APKs to GitHub Release
-    needs: build
-    if: needs.build.result == 'success'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Download APK artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: i2pd-*
-          path: release
-          merge-multiple: true
-
-      - name: Show APKs
-        shell: bash
-        run: |
-          set -e
-
-          echo "Release APKs:"
-          find release \
-            -type f \
-            -name '*.apk' \
-            -print \
-            | sort
-
-      - name: Determine release tag
-        id: release
-        shell: bash
-        env:
-          EVENT_RELEASE_TAG: ${{ github.event.release.tag_name }}
-          MANUAL_RELEASE_TAG: ${{ inputs.release_tag }}
-        run: |
-          set -e
-
-          if [ -n "$EVENT_RELEASE_TAG" ]; then
-            TAG="$EVENT_RELEASE_TAG"
-          else
-            TAG="$MANUAL_RELEASE_TAG"
-          fi
-
-          if [ -z "$TAG" ]; then
-            echo "ERROR: release tag is empty"
-            exit 1
-          fi
-
-          echo "Using release tag: $TAG"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-
-      - name: Upload APKs to Release
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: ${{ steps.release.outputs.tag }}
-          files: |
-            release/*.apk
-          fail_on_unmatched_files: true
-          overwrite_files: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
