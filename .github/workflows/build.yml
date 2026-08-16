@@ -53,43 +53,48 @@ jobs:
           PACKAGES: i2pd
           NO_REFRESH_CHECK: 1
           BUILD_LOG: 1
+          ARTIFACTS_DIR: ${{ github.workspace }}/artifacts
 
-      - name: Show i2pd build error
+      - name: Show build error
         if: steps.build.outcome == 'failure'
         shell: bash
         run: |
           set +e
-
-          LOG="logs/package/feeds/action/i2pd/compile.txt"
 
           echo "========================================"
           echo "i2pd BUILD FAILED"
           echo "ARCH: ${{ matrix.arch }}"
           echo "========================================"
 
-          if [ ! -f "$LOG" ]; then
-            echo "i2pd compile log not found:"
-            echo "$LOG"
-            find logs -path '*i2pd*' -type f -print 2>/dev/null | sort
-            exit 1
-          fi
+          echo
+          echo "Available logs:"
+          find artifacts logs -type f -print 2>/dev/null | sort
 
           echo
           echo "========================================"
           echo "i2pd errors"
           echo "========================================"
 
-          grep -nEi \
-            'error:|fatal error:|CMake Error|FAILED|undefined reference|cannot find|No such file|not found' \
-            "$LOG" \
-            | tail -n 100 || true
+          I2PD_LOGS=$(find artifacts logs -type f \
+            \( -path '*i2pd*' -o -name 'i2pd*.txt' \) \
+            2>/dev/null)
 
-          echo
-          echo "========================================"
-          echo "Last 250 lines"
-          echo "========================================"
+          while IFS= read -r LOG; do
+            [ -z "$LOG" ] && continue
 
-          tail -n 250 "$LOG"
+            echo
+            echo "----- $LOG -----"
+
+            grep -nEi \
+              'error:|fatal error:|CMake Error|FAILED|undefined reference|cannot find|No such file|not found' \
+              "$LOG" \
+              | tail -n 100 || true
+
+            echo
+            echo "Last 250 lines:"
+            tail -n 250 "$LOG"
+
+          done <<< "$I2PD_LOGS"
 
           exit 1
 
@@ -97,40 +102,47 @@ jobs:
         if: steps.build.outcome == 'failure'
         run: exit 1
 
-      - name: Find generated APKs
-        id: find_apk
+      - name: Rename APK
+        id: apk
         shell: bash
         run: |
           set -e
 
-          echo "Generated i2pd APKs:"
+          APK="$(find bin -type f -name 'i2pd-*.apk' | head -n 1)"
 
-          find bin \
-            -type f \
-            -name 'i2pd-*.apk' \
-            -print | sort
-
-          APK_COUNT="$(find bin -type f -name 'i2pd-*.apk' | wc -l)"
-
-          if [ "$APK_COUNT" -eq 0 ]; then
-            echo "ERROR: no i2pd APK found"
+          if [ -z "$APK" ]; then
+            echo "ERROR: i2pd APK not found"
+            find bin -type f -name '*.apk' | sort || true
             exit 1
           fi
 
-      - name: Upload APK artifacts
+          BASENAME="$(basename "$APK")"
+          DIR="$(dirname "$APK")"
+
+          NEW_NAME="${BASENAME%.apk}-${{ matrix.arch }}.apk"
+          NEW_PATH="${DIR}/${NEW_NAME}"
+
+          mv "$APK" "$NEW_PATH"
+
+          echo "Original: $APK"
+          echo "Renamed: $NEW_PATH"
+
+          echo "path=$NEW_PATH" >> "$GITHUB_OUTPUT"
+          echo "name=$NEW_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: i2pd-${{ matrix.arch }}
-          path: |
-            bin/**/i2pd-*.apk
+          path: ${{ steps.apk.outputs.path }}
           if-no-files-found: error
 
       - name: Upload APK to Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.event.release.tag_name }}
-          files: |
-            bin/**/i2pd-*.apk
+          files: ${{ steps.apk.outputs.path }}
           fail_on_unmatched_files: true
+          overwrite_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
