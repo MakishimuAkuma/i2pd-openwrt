@@ -16,19 +16,24 @@ jobs:
 
     strategy:
       fail-fast: false
+
       matrix:
         arch:
           - arm_cortex-a7
           - arm_cortex-a9
+          - arm_cortex-a15_neon-vfpv4
           - aarch64_cortex-a53
           - aarch64_cortex-a72
-          - rockchip-armv8
           - aarch64_generic
           - x86_64
+          - i386_pentium4
           - mipsel_24kc
           - mips_mips32
-          - mips64_mips64r2
+          - mips64_octeonplus
           - riscv64_generic
+
+        branch:
+          - openwrt-25.12
 
     steps:
       - name: Checkout package feed
@@ -40,6 +45,7 @@ jobs:
       - name: Verify package
         run: |
           echo "Architecture: ${{ matrix.arch }}"
+          echo "Branch: openwrt-25.12"
           echo
           grep -E '^PKG_(NAME|VERSION|RELEASE|SOURCE|SOURCE_SUBDIR|HASH):' \
             i2pd/Makefile
@@ -49,7 +55,7 @@ jobs:
         continue-on-error: true
         uses: openwrt/gh-action-sdk@main
         env:
-          ARCH: ${{ matrix.arch }}
+          ARCH: ${{ matrix.arch }}-openwrt-25.12
           PACKAGES: i2pd
           NO_REFRESH_CHECK: 1
           BUILD_LOG: 1
@@ -64,6 +70,7 @@ jobs:
           echo "========================================"
           echo "i2pd BUILD FAILED"
           echo "ARCH: ${{ matrix.arch }}"
+          echo "SDK:  ${{ matrix.arch }}-openwrt-25.12"
           echo "========================================"
 
           echo
@@ -72,29 +79,25 @@ jobs:
 
           echo
           echo "========================================"
-          echo "i2pd errors"
+          echo "Build errors"
           echo "========================================"
 
-          I2PD_LOGS=$(find artifacts logs -type f \
-            \( -path '*i2pd*' -o -name 'i2pd*.txt' \) \
-            2>/dev/null)
+          find artifacts logs -type f 2>/dev/null | while read -r LOG; do
+            grep -nEi \
+              'error:|fatal error:|CMake Error|FAILED|undefined reference|cannot find|No such file|not found|ERROR:' \
+              "$LOG" 2>/dev/null | tail -n 50
+          done
 
-          while IFS= read -r LOG; do
-            [ -z "$LOG" ] && continue
+          echo
+          echo "========================================"
+          echo "Last lines of logs"
+          echo "========================================"
 
+          find artifacts logs -type f 2>/dev/null | while read -r LOG; do
             echo
             echo "----- $LOG -----"
-
-            grep -nEi \
-              'error:|fatal error:|CMake Error|FAILED|undefined reference|cannot find|No such file|not found' \
-              "$LOG" \
-              | tail -n 100 || true
-
-            echo
-            echo "Last 250 lines:"
-            tail -n 250 "$LOG"
-
-          done <<< "$I2PD_LOGS"
+            tail -n 100 "$LOG"
+          done
 
           exit 1
 
@@ -128,12 +131,11 @@ jobs:
           echo "Renamed: $NEW_PATH"
 
           echo "path=$NEW_PATH" >> "$GITHUB_OUTPUT"
-          echo "name=$NEW_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: i2pd-${{ matrix.arch }}
+          name: i2pd-${{ matrix.arch }}-openwrt-25.12
           path: ${{ steps.apk.outputs.path }}
           if-no-files-found: error
 
