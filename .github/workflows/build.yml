@@ -4,6 +4,7 @@ on:
   release:
     types:
       - published
+
   workflow_dispatch:
     inputs:
       release_tag:
@@ -18,6 +19,11 @@ env:
   OPENWRT_BRANCH: openwrt-25.12
 
 jobs:
+
+  # ============================================================
+  # BUILD
+  # ============================================================
+
   build:
     name: Build i2pd (${{ matrix.arch }})
     runs-on: ubuntu-latest
@@ -30,23 +36,36 @@ jobs:
           - arm_cortex-a7
           - arm_cortex-a9
           - arm_cortex-a15_neon-vfpv4
+
           - aarch64_cortex-a53
           - aarch64_cortex-a72
           - rockchip-armv8
           - aarch64_generic
+
           - i386_pentium4
           - x86_64
+
           - mipsel_24kc
           - mips_mips32
           - mips64_octeonplus
+
           - riscv64_generic
 
     steps:
+
+      # ----------------------------------------------------------
+      # Checkout
+      # ----------------------------------------------------------
+
       - name: Checkout package feed
         uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 1
+
+      # ----------------------------------------------------------
+      # Verify package
+      # ----------------------------------------------------------
 
       - name: Verify package
         shell: bash
@@ -55,14 +74,21 @@ jobs:
 
           echo "========================================"
           echo "Architecture: ${{ matrix.arch }}"
-          echo "SDK:          ${{ matrix.arch }}-${{ env.OPENWRT_BRANCH }}"
+          echo "OpenWrt:      ${{ env.OPENWRT_BRANCH }}"
           echo "========================================"
 
           test -f i2pd/Makefile
 
+          echo
+          echo "Package metadata:"
+
           grep -E \
             '^PKG_(NAME|VERSION|RELEASE|SOURCE|SOURCE_URL|SOURCE_SUBDIR|HASH):' \
             i2pd/Makefile
+
+      # ----------------------------------------------------------
+      # Build
+      # ----------------------------------------------------------
 
       - name: Build OpenWrt package
         uses: openwrt/gh-action-sdk@main
@@ -72,3 +98,175 @@ jobs:
           FEEDNAME: action
           NO_REFRESH_CHECK: 1
           BUILD_LOG: 1
+
+      # ----------------------------------------------------------
+      # Find APK
+      # ----------------------------------------------------------
+
+      - name: Find APK
+        id: apk
+        shell: bash
+        run: |
+          set -e
+
+          APK="$(find bin \
+            -type f \
+            -name 'i2pd-*.apk' \
+            | head -n 1)"
+
+          if [ -z "$APK" ]; then
+            echo "ERROR: i2pd APK not found"
+
+            echo
+            echo "Available APK files:"
+            find bin \
+              -type f \
+              -name '*.apk' \
+              -print \
+              | sort || true
+
+            exit 1
+          fi
+
+          echo "Found APK:"
+          echo "$APK"
+
+          echo "source=$APK" >> "$GITHUB_OUTPUT"
+
+      # ----------------------------------------------------------
+      # Rename APK
+      # ----------------------------------------------------------
+
+      - name: Rename APK
+        id: renamed
+        shell: bash
+        run: |
+          set -e
+
+          SOURCE="${{ steps.apk.outputs.source }}"
+
+          DIR="$(dirname "$SOURCE")"
+          BASE="$(basename "$SOURCE" .apk)"
+
+          NAME="${BASE}-${{ matrix.arch }}.apk"
+          TARGET="${DIR}/${NAME}"
+
+          mv "$SOURCE" "$TARGET"
+
+          echo "Renamed:"
+          echo "$TARGET"
+
+          echo "path=$TARGET" >> "$GITHUB_OUTPUT"
+
+      # ----------------------------------------------------------
+      # Upload APK as GitHub Actions artifact
+      # ----------------------------------------------------------
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: i2pd-apk-${{ matrix.arch }}
+          path: ${{ steps.renamed.outputs.path }}
+          if-no-files-found: error
+          retention-days: 7
+
+
+  # ============================================================
+  # RELEASE
+  # ============================================================
+
+  release:
+    name: Publish APKs to GitHub Release
+
+    needs:
+      - build
+
+    if: needs.build.result == 'success'
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ----------------------------------------------------------
+      # Determine Release tag
+      # ----------------------------------------------------------
+
+      - name: Determine release tag
+        id: release_tag
+        shell: bash
+        env:
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+          MANUAL_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -e
+
+          if [ -n "$EVENT_TAG" ]; then
+            TAG="$EVENT_TAG"
+          else
+            TAG="$MANUAL_TAG"
+          fi
+
+          if [ -z "$TAG" ]; then
+            echo "ERROR: Release tag is empty"
+            exit 1
+          fi
+
+          echo "Using Release:"
+          echo "$TAG"
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      # ----------------------------------------------------------
+      # Download all APK artifacts
+      # ----------------------------------------------------------
+
+      - name: Download APK artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: i2pd-apk-*
+          path: release
+          merge-multiple: true
+
+      # ----------------------------------------------------------
+      # Show downloaded files
+      # ----------------------------------------------------------
+
+      - name: List APKs
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "APKs to upload"
+          echo "========================================"
+
+          find release \
+            -type f \
+            -name '*.apk' \
+            -print \
+            | sort
+
+          COUNT="$(find release -type f -name '*.apk' | wc -l)"
+
+          if [ "$COUNT" -eq 0 ]; then
+            echo "ERROR: No APKs found"
+            exit 1
+          fi
+
+          echo
+          echo "Found $COUNT APK(s)"
+
+      # ----------------------------------------------------------
+      # Upload all APKs into Release
+      # ----------------------------------------------------------
+
+      - name: Upload APKs to Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.release_tag.outputs.tag }}
+          files: |
+            release/*.apk
+          fail_on_unmatched_files: true
+          overwrite_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
