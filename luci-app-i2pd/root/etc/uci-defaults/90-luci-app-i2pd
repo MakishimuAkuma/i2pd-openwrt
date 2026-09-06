@@ -1,0 +1,81 @@
+#!/bin/sh
+
+CONFIG=/etc/config/i2pd
+
+[ -f "$CONFIG" ] || exit 0
+
+if grep -qE '^[[:space:]]*option[[:space:]]+[^[:space:]]*\.' "$CONFIG"; then
+	tmp="${CONFIG}.new"
+	awk '
+		$1 == "option" {
+			gsub(/\./, "_", $2)
+		}
+		{ print }
+	' "$CONFIG" > "$tmp"
+	chmod 600 "$tmp"
+	mv "$tmp" "$CONFIG"
+fi
+
+if ! uci -q get i2pd.main >/dev/null 2>&1; then
+	if uci -q get i2pd.@i2pd[0] >/dev/null 2>&1; then
+		uci -q rename i2pd.@i2pd[0]=main || true
+		uci -q commit i2pd || true
+	fi
+fi
+
+# Шаг 3: Полная очистка устаревших строк и накат дефолтных значений из i2pd.conf
+uci -q batch <<EOF
+	set i2pd.main.data_dir='/etc/i2pd'
+	set i2pd.main.netdb_dir='/etc/i2pd/netDb'
+	set i2pd.main.addressbook_dir='/etc/i2pd/addressbook'
+
+	set i2pd.main.enabled='0'
+	set i2pd.main.ipv4='1'
+	set i2pd.main.ipv6='0'
+	set i2pd.main.bandwidth='X'
+	set i2pd.main.share='100'
+	set i2pd.main.netid='2'
+	set i2pd.main.log='stdout'
+	set i2pd.main.loglevel='info'
+
+	set i2pd.main.ntcp2_enabled='1'
+	set i2pd.main.ntcp2_published='1'
+	set i2pd.main.ssu2_enabled='1'
+	set i2pd.main.ssu2_published='1'
+	set i2pd.main.ssu2_version='2'
+
+	set i2pd.main.http_enabled='1'
+	set i2pd.main.http_address='192.168.1.1'
+	set i2pd.main.http_port='7070'
+	set i2pd.main.http_webroot='/'
+	set i2pd.main.http_lang='english'
+
+	set i2pd.main.httpproxy_enabled='1'
+	set i2pd.main.httpproxy_address='192.168.1.1'
+	set i2pd.main.httpproxy_port='4444'
+	set i2pd.main.httpproxy_addresshelper='1'
+	set i2pd.main.socksproxy_enabled='1'
+	set i2pd.main.socksproxy_address='192.168.1.1'
+	set i2pd.main.socksproxy_port='4447'
+
+	set i2pd.main.sam_enabled='0'
+	set i2pd.main.bob_enabled='0'
+	set i2pd.main.i2cp_enabled='0'
+	set i2pd.main.i2pcontrol_enabled='0'
+
+	set i2pd.main.reseed_verify='1'
+
+	commit i2pd
+EOF
+
+if [ -z "${IPKG_INSTROOT}" ]; then
+	if [ -x /etc/init.d/rpcd ]; then
+		/etc/init.d/rpcd restart >/dev/null 2>&1
+	fi
+
+	if [ -x /etc/init.d/i2pd ]; then
+		/etc/init.d/i2pd restart >/dev/null 2>&1 || true
+	fi
+fi
+
+exit 0

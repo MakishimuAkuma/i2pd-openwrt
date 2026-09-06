@@ -1,0 +1,26 @@
+{
+  "admin/services/i2pd": {
+    "title": "i2pd",
+    "order": 50,
+    "action": { "type": "firstchild" },
+    "depends": { "acl": [ "luci-app-i2pd" ] }
+  },
+  "admin/services/i2pd/status": {
+    "title": "Status",
+    "order": 10,
+    "action": { "type": "view", "path": "i2pd/status" },
+    "depends": { "acl": [ "luci-app-i2pd" ] }
+  },
+  "admin/services/i2pd/config": {
+    "title": "Configuration",
+    "order": 20,
+    "action": { "type": "view", "path": "i2pd/config" },
+    "depends": { "acl": [ "luci-app-i2pd" ] }
+  },
+  "admin/services/i2pd/tunnels": {
+    "title": "Tunnels",
+    "order": 30,
+    "action": { "type": "view", "path": "i2pd/tunnels" },
+    "depends": { "acl": [ "luci-app-i2pd" ] }
+  }
+}

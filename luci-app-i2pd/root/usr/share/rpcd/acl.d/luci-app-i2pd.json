@@ -1,0 +1,17 @@
+{
+	"luci-app-i2pd": {
+		"description": "Grant access to i2pd configuration and service control",
+		"read": {
+			"uci": [ "i2pd" ],
+			"ubus": {
+				"luci.i2pd": [ "status" ]
+			}
+		},
+		"write": {
+			"uci": [ "i2pd" ],
+			"ubus": {
+				"luci.i2pd": [ "start", "stop", "enable", "disable", "restart" ]
+			}
+		}
+	}
+}
