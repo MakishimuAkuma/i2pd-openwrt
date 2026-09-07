@@ -95,8 +95,9 @@ jobs:
           test -f luci-app-i2pd/root/usr/share/rpcd/ucode/i2pd.uc
           test -f luci-app-i2pd/root/usr/share/rpcd/acl.d/luci-app-i2pd.json
           test -f luci-app-i2pd/root/usr/share/luci/menu.d/luci-app-i2pd.json
-          test -f luci-app-i2pd/htdocs/luci-static/resources/view/i2pd/config.js
-          test -f luci-app-i2pd/htdocs/luci-static/resources/view/i2pd/tunnels.js
+          test -f luci-app-i2pd/root/www/luci-static/resources/view/i2pd/config.js
+          test -f luci-app-i2pd/root/www/luci-static/resources/view/i2pd/tunnels.js
+          test -f luci-app-i2pd/root/www/luci-static/resources/view/i2pd/status.js
 
       - name: Build LuCI package
         uses: openwrt/gh-action-sdk@main
