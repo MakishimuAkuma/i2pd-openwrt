@@ -1,13 +1,16 @@
 name: Build i2pd OpenWrt 25.12 APKs
 
 on:
+  release:
+    types:
+      - published
+
   workflow_dispatch:
-  push:
-    branches: [ main ]
-    paths:
-      - 'i2pd/**'
-      - 'luci-app-i2pd/**'
-      - '.github/workflows/build.yml'
+    inputs:
+      release_tag:
+        description: "Existing GitHub Release tag"
+        required: true
+        type: string
 
 permissions:
   contents: write
