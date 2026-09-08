@@ -14,29 +14,15 @@ TUNDIR=/etc/i2pd/tunnels.d
 CERTSDIR=/usr/share/i2pd/certificates
 
 start_instance() {
-	local cfg="$1" data_dir netdb_dir addressbook_dir
+	local cfg="$1" data_dir
 	config_get data_dir "$cfg" data_dir "$DATADIR"
-	config_get netdb_dir "$cfg" netdb_dir
-	config_get addressbook_dir "$cfg" addressbook_dir
+
 	[ -n "$data_dir" ] || data_dir="$DATADIR"
 	mkdir -p "$data_dir" "$TUNDIR"
 	chown "$USER:$GROUP" "$data_dir"
 	chown -R "$USER:$GROUP" "$TUNDIR"
 
-	if [ -n "$netdb_dir" ]; then
-		mkdir -p "$netdb_dir"
-		chown "$USER:$GROUP" "$netdb_dir"
-		rm -f "$data_dir/netDb"
-		ln -s "$netdb_dir" "$data_dir/netDb"
-	fi
-	if [ -n "$addressbook_dir" ]; then
-		mkdir -p "$addressbook_dir"
-		chown "$USER:$GROUP" "$addressbook_dir"
-		rm -f "$data_dir/addressbook"
-		ln -s "$addressbook_dir" "$data_dir/addressbook"
-	fi
-
-	rm -f "$data_dir/certificates"
+	rm -rf "$data_dir/certificates"
 	ln -s "$CERTSDIR" "$data_dir/certificates"
 
 	/usr/libexec/i2pd/generate-config || return 1

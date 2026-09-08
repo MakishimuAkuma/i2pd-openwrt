@@ -109,7 +109,7 @@ jobs:
           BUILD_LOG: 1
           V: s
 
-      - name: Find APK
+      - name: Find and rename APK
         id: apk
         shell: bash
         run: |
@@ -120,8 +120,23 @@ jobs:
           test -n "$apk"
           test -f "$apk"
 
-          echo "Found: $apk"
-          echo "path=$apk" >> "$GITHUB_OUTPUT"
+          version="$(sed -n 's/^PKG_VERSION:=//p' i2pd/Makefile | head -n 1)"
+          release="$(sed -n 's/^PKG_RELEASE:=//p' i2pd/Makefile | head -n 1)"
+
+          test -n "$version"
+          test -n "$release"
+
+          output="i2pd-${version}-r${release}-${{ matrix.arch }}.apk"
+
+          echo "Source APK: $apk"
+          echo "Output APK: $output"
+
+          mkdir -p release
+          cp "$apk" "release/$output"
+
+          test -f "release/$output"
+
+          echo "path=release/$output" >> "$GITHUB_OUTPUT"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -151,11 +166,22 @@ jobs:
         run: |
           set -euxo pipefail
 
+          echo "APK files:"
+
           find release \
             -type f \
             -name '*.apk' \
             -print \
             | sort
+
+          count="$(find release \
+            -type f \
+            -name 'i2pd-*.apk' \
+            | wc -l)"
+
+          echo "Found $count APK(s)"
+
+          test "$count" -eq 13
 
       - name: Upload APKs to GitHub Release
         uses: softprops/action-gh-release@v2
