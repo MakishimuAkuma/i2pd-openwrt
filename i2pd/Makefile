@@ -19,7 +19,7 @@ include $(INCLUDE_DIR)/package.mk
 define Package/i2pd
   SECTION:=net
   CATEGORY:=Network
-  DEPENDS:=+libopenssl +boost +boost-program_options +libatomic +zlib
+  DEPENDS:=+libopenssl +boost +boost-program_options +libatomic +zlib +ucode
   TITLE:=full-featured C++ implementation of I2P client
   URL:=https://github.com/PurpleI2P/i2pd
   USERID:=i2pd:i2pd
@@ -49,6 +49,17 @@ define Package/i2pd/install
 	$(INSTALL_DATA) $(PKG_BUILD_DIR)/contrib/tunnels.d/README $(1)/etc/i2pd/tunnels.d/
 	$(INSTALL_DIR) $(1)/usr/libexec/i2pd
 	$(INSTALL_BIN) ./files/generate-config $(1)/usr/libexec/i2pd/generate-config
+
+	$(INSTALL_DIR) $(1)/usr/share/luci/menu.d
+	$(INSTALL_DATA) ./root/usr/share/luci/menu.d/luci-app-i2pd.json $(1)/usr/share/luci/menu.d/
+	$(INSTALL_DIR) $(1)/usr/share/rpcd/acl.d
+	$(INSTALL_DATA) ./root/usr/share/rpcd/acl.d/luci-app-i2pd.json $(1)/usr/share/rpcd/acl.d/
+	$(INSTALL_DIR) $(1)/usr/share/rpcd/ucode
+	$(INSTALL_DATA) ./root/usr/share/rpcd/ucode/i2pd.uc $(1)/usr/share/rpcd/ucode/
+	$(INSTALL_DIR) $(1)/etc/uci-defaults
+	$(INSTALL_BIN) ./root/etc/uci-defaults/90-luci-app-i2pd $(1)/etc/uci-defaults/
+	$(INSTALL_DIR) $(1)/www/luci-static/resources/view/i2pd
+	$(INSTALL_DATA) ./root/www/luci-static/resources/view/i2pd/*.js $(1)/www/luci-static/resources/view/i2pd/
 endef
 
 $(eval $(call BuildPackage,i2pd))
