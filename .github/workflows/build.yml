@@ -1,209 +1,166 @@
 name: Build i2pd OpenWrt 25.12 APKs
 
 on:
-release:
-types:
-- published
+  release:
+    types:
+      - published
 
-workflow_dispatch:
-inputs:
-release_tag:
-description: "Existing GitHub Release tag"
-required: true
-type: string
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing GitHub Release tag"
+        required: true
+        type: string
 
 permissions:
-contents: write
+  contents: write
 
 env:
-OPENWRT_BRANCH: openwrt-25.12
+  OPENWRT_BRANCH: openwrt-25.12
 
 jobs:
-prepare:
-name: Prepare release
-runs-on: ubuntu-latest
+  prepare:
+    name: Prepare release
+    runs-on: ubuntu-latest
 
-outputs:
-  release_tag: ${{ steps.release.outputs.tag }}
+    outputs:
+      release_tag: ${{ steps.release.outputs.tag }}
 
-steps:
-  - name: Resolve release tag
-    id: release
-    shell: bash
-    env:
-      GH_TOKEN: ${{ github.token }}
-    run: |
-      set -euxo pipefail
+    steps:
+      - name: Resolve release tag
+        id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
 
-      if [ "${{ github.event_name }}" = "release" ]; then
-        tag="${{ github.event.release.tag_name }}"
-      else
-        tag="${{ inputs.release_tag }}"
-      fi
+          if [ "${{ github.event_name }}" = "release" ]; then
+            tag="${{ github.event.release.tag_name }}"
+          else
+            tag="${{ inputs.release_tag }}"
+          fi
 
-      test -n "$tag"
+          test -n "$tag"
 
-      echo "Release tag: $tag"
+          echo "Release tag: $tag"
 
-      gh release view "$tag" \
-        --repo "$GITHUB_REPOSITORY" >/dev/null
+          gh release view "$tag" \
+            --repo "$GITHUB_REPOSITORY" >/dev/null
 
-      echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
-build-i2pd:
-name: i2pd / ${{ matrix.arch }}
-runs-on: ubuntu-latest
-needs: prepare
+  build-i2pd:
+    name: i2pd / ${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    needs: prepare
 
-strategy:
-  fail-fast: false
-  matrix:
-    arch:
-      - arm_cortex-a7
-      - arm_cortex-a9
-      - arm_cortex-a15_neon-vfpv4
-      - aarch64_cortex-a53
-      - aarch64_cortex-a72
-      - rockchip-armv8
-      - aarch64_generic
-      - i386_pentium4
-      - x86_64
-      - mipsel_24kc
-      - mips_mips32
-      - mips64_octeonplus
-      - riscv64_generic
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - arm_cortex-a7
+          - arm_cortex-a9
+          - arm_cortex-a15_neon-vfpv4
+          - aarch64_cortex-a53
+          - aarch64_cortex-a72
+          - rockchip-armv8
+          - aarch64_generic
+          - i386_pentium4
+          - x86_64
+          - mipsel_24kc
+          - mips_mips32
+          - mips64_octeonplus
+          - riscv64_generic
 
-steps:
-  - name: Checkout release tag
-    uses: actions/checkout@v4
-    with:
-      ref: ${{ needs.prepare.outputs.release_tag }}
-      fetch-depth: 0
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.release_tag }}
+          fetch-depth: 0
 
-  - name: Show release information
-    shell: bash
-    run: |
-      set -euxo pipefail
+      - name: Verify package files
+        shell: bash
+        run: |
+          set -euxo pipefail
 
-      echo "Release tag: ${{ needs.prepare.outputs.release_tag }}"
-      echo "Commit:"
-      git rev-parse HEAD
+          test -f i2pd/Makefile
+          test -f i2pd/files/i2pd.config
+          test -f i2pd/files/i2pd.init
+          test -f i2pd/files/generate-config
 
-      echo "Tag:"
-      git describe --tags --exact-match HEAD
+          test -f i2pd/root/usr/share/rpcd/ucode/i2pd.uc
+          test -f i2pd/root/usr/share/rpcd/acl.d/luci-app-i2pd.json
+          test -f i2pd/root/usr/share/luci/menu.d/luci-app-i2pd.json
 
-  - name: Verify package files
-    shell: bash
-    run: |
-      set -euxo pipefail
+          test -f i2pd/root/www/luci-static/resources/view/i2pd/config.js
+          test -f i2pd/root/www/luci-static/resources/view/i2pd/tunnels.js
+          test -f i2pd/root/www/luci-static/resources/view/i2pd/status.js
 
-      test -f i2pd/Makefile
-      test -f i2pd/files/i2pd.config
-      test -f i2pd/files/i2pd.init
-      test -f i2pd/files/generate-config
+      - name: Build i2pd
+        uses: openwrt/gh-action-sdk@main
+        env:
+          ARCH: ${{ matrix.arch }}-${{ env.OPENWRT_BRANCH }}
+          FEEDNAME: action
+          PACKAGES: i2pd
+          NO_REFRESH_CHECK: 1
+          NO_SHFMT_CHECK: 1
+          BUILD_LOG: 1
+          V: s
 
-      test -f i2pd/root/usr/share/rpcd/ucode/i2pd.uc
-      test -f i2pd/root/usr/share/rpcd/acl.d/luci-app-i2pd.json
-      test -f i2pd/root/usr/share/luci/menu.d/luci-app-i2pd.json
+      - name: Find APK
+        id: apk
+        shell: bash
+        run: |
+          set -euo pipefail
 
-      test -f i2pd/root/www/luci-static/resources/view/i2pd/config.js
-      test -f i2pd/root/www/luci-static/resources/view/i2pd/tunnels.js
-      test -f i2pd/root/www/luci-static/resources/view/i2pd/status.js
+          apk="$(find bin -type f -name 'i2pd-*.apk' | head -n 1)"
 
-  - name: Build i2pd
-    uses: openwrt/gh-action-sdk@main
-    env:
-      ARCH: ${{ matrix.arch }}-${{ env.OPENWRT_BRANCH }}
-      FEEDNAME: action
-      PACKAGES: i2pd
-      NO_REFRESH_CHECK: 1
-      NO_SHFMT_CHECK: 1
-      BUILD_LOG: 1
-      V: s
+          test -n "$apk"
+          test -f "$apk"
 
-  - name: Find APK
-    id: apk
-    shell: bash
-    run: |
-      set -euo pipefail
+          echo "Found: $apk"
+          echo "path=$apk" >> "$GITHUB_OUTPUT"
 
-      echo "Searching for i2pd APK..."
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: i2pd-${{ matrix.arch }}
+          path: ${{ steps.apk.outputs.path }}
+          if-no-files-found: error
+          retention-days: 7
 
-      find bin \
-        -type f \
-        -name 'i2pd-*.apk' \
-        -print
+  publish:
+    name: Upload APKs to release
+    runs-on: ubuntu-latest
+    needs:
+      - prepare
+      - build-i2pd
 
-      apk="$(find bin \
-        -type f \
-        -name 'i2pd-*.apk' \
-        | head -n 1)"
+    steps:
+      - name: Download APKs
+        uses: actions/download-artifact@v4
+        with:
+          path: release
+          pattern: i2pd-*
+          merge-multiple: true
 
-      test -n "$apk"
-      test -f "$apk"
+      - name: Show APKs
+        shell: bash
+        run: |
+          set -euxo pipefail
 
-      echo "Found: $apk"
-      echo "path=$apk" >> "$GITHUB_OUTPUT"
+          find release \
+            -type f \
+            -name '*.apk' \
+            -print \
+            | sort
 
-  - name: Upload APK artifact
-    uses: actions/upload-artifact@v4
-    with:
-      name: i2pd-${{ matrix.arch }}
-      path: ${{ steps.apk.outputs.path }}
-      if-no-files-found: error
-      retention-days: 7
-
-publish:
-name: Upload APKs to release
-runs-on: ubuntu-latest
-needs:
-- prepare
-- build-i2pd
-
-steps:
-  - name: Download APKs
-    uses: actions/download-artifact@v4
-    with:
-      path: release
-      pattern: i2pd-*
-      merge-multiple: true
-
-  - name: Show APKs
-    shell: bash
-    run: |
-      set -euxo pipefail
-
-      echo "APK files:"
-      find release \
-        -type f \
-        -name '*.apk' \
-        -print \
-        | sort
-
-      count="$(find release \
-        -type f \
-        -name 'i2pd-*.apk' \
-        | wc -l)"
-
-      test "$count" -gt 0
-
-      echo "Found $count APK(s)"
-
-  - name: Verify release
-    env:
-      GH_TOKEN: ${{ github.token }}
-    shell: bash
-    run: |
-      set -euxo pipefail
-
-      gh release view \
-        "${{ needs.prepare.outputs.release_tag }}" \
-        --repo "$GITHUB_REPOSITORY" >/dev/null
-
-  - name: Upload APKs to GitHub Release
-    uses: softprops/action-gh-release@v2
-    with:
-      tag_name: ${{ needs.prepare.outputs.release_tag }}
-      files: release/*.apk
-      fail_on_unmatched_files: true
-      overwrite_files: true
+      - name: Upload APKs to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.release_tag }}
+          files: release/*.apk
+          fail_on_unmatched_files: true
+          overwrite_files: true
