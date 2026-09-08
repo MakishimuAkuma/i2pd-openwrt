@@ -1,5 +1,7 @@
 #!/bin/sh
 
+. /lib/functions.sh
+
 set -eu
 
 OUT="/tmp/i2pd.conf"
