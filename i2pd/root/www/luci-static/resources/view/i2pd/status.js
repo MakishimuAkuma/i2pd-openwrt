@@ -107,7 +107,7 @@ return view.extend({
 
 		  E('td', {
 			  'class': 'td left'
-		  }, status?.config || '/tmp/i2pd.conf')
+		  }, status?.config || '/var/lib/i2pd.conf')
 		])
 				  ]),
 

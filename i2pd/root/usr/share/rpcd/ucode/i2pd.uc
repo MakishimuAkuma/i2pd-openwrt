@@ -66,7 +66,7 @@ return {
 					instance: state.instance,
 					enabled: service_enabled(),
 					data_dir: data_dir,
-					config: '/tmp/i2pd.conf',
+					config: '/var/lib/i2pd.conf',
 					tunnels_dir: '/etc/i2pd/tunnels.d'
 				};
 			}

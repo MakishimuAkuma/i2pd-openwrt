@@ -1,4 +1,5 @@
 'use strict';
+
 'require view';
 'require form';
 'require rpc';
@@ -8,15 +9,9 @@ const callRestart = rpc.declare({
 	method: 'restart'
 });
 
-function addSection(map, title) {
-	let s = map.section(form.TypedSection, 'i2pd', title);
-	s.anonymous = true;
-	s.addremove = false;
-	return s;
-}
 
 function addFlag(section, name, title, def, description) {
-	let o = section.option(form.Flag, name, title);
+	let o = section.taboption(section._currentTab, form.Flag, name, title);
 
 	if (def !== undefined)
 		o.default = def;
@@ -27,8 +22,9 @@ function addFlag(section, name, title, def, description) {
 	return o;
 }
 
+
 function addValue(section, name, title, def, datatype, description) {
-	let o = section.option(form.Value, name, title);
+	let o = section.taboption(section._currentTab, form.Value, name, title);
 
 	if (def !== undefined)
 		o.default = def;
@@ -42,9 +38,17 @@ function addValue(section, name, title, def, datatype, description) {
 	return o;
 }
 
+
 function addPort(section, name, title, def) {
 	return addValue(section, name, title, def, 'port');
 }
+
+
+function tab(section, name, title) {
+	section.tab(name, title);
+	section._currentTab = name;
+}
+
 
 return view.extend({
 	render: function() {
@@ -56,7 +60,23 @@ return view.extend({
 						 _('Configure the i2pd router.')
 		);
 
-		s = addSection(m, _('General'));
+		/*
+		 * One section only.
+		 *
+		 * All configuration is divided into tabs instead of
+		 * rendering many long sections vertically.
+		 */
+		s = m.section(form.TypedSection, 'i2pd', _('Configuration'));
+
+		s.anonymous = true;
+		s.addremove = false;
+
+
+		/* =========================================================
+		 * GENERAL
+		 * ======================================================= */
+
+		tab(s, 'general', _('General'));
 
 		addValue(
 			s,
@@ -83,15 +103,15 @@ return view.extend({
 
 		addValue(
 			s,
-		   'tunnelsdir',
-		   _('Tunnels directory'),
+			'tunnelsdir',
+			_('Tunnels directory'),
 				 '/etc/i2pd/tunnels.d'
 		);
 
 		addValue(
 			s,
-		   'certsdir',
-		   _('Certificates directory'),
+			'certsdir',
+			_('Certificates directory'),
 				 '/usr/share/i2pd/certificates'
 		);
 
@@ -107,6 +127,13 @@ return view.extend({
 			'family',
 			_('Family')
 		);
+
+
+		/* =========================================================
+		 * NETWORK
+		 * ======================================================= */
+
+		tab(s, 'network', _('Network'));
 
 		addValue(
 			s,
@@ -168,14 +195,32 @@ return view.extend({
 				'0'
 		);
 
-		o = s.option(form.ListValue, 'bandwidth', _('Bandwidth'));
+		addFlag(
+			s,
+			'nat',
+			_('NAT'),
+				'0'
+		);
+
+		addFlag(
+			s,
+			'reservedrange',
+			_('Reserved range'),
+				'0'
+		);
+
+		o = s.taboption(
+			'network',
+			form.ListValue,
+				'bandwidth',
+				_('Bandwidth')
+		);
 
 		o.value('L', 'L');
 		o.value('O', 'O');
 		o.value('P', 'P');
 		o.value('X', 'X');
-
-		o.default = 'L';
+		o.default = 'X';
 
 		o.description = _(
 			'L = 32 KB/s, O = 256 KB/s, P = 2048 KB/s, X = unlimited. ' +
@@ -213,14 +258,23 @@ return view.extend({
 				_('Enable STAN mode for limited connectivity.')
 		);
 
-		s = addSection(m, _('Logging'));
 
-		o = s.option(form.ListValue, 'log', _('Log destination'));
+		/* =========================================================
+		 * LOGGING
+		 * ======================================================= */
+
+		tab(s, 'logging', _('Logging'));
+
+		o = s.taboption(
+			'logging',
+			form.ListValue,
+				'log',
+				_('Log destination')
+		);
 
 		o.value('stdout', 'stdout');
 		o.value('file', 'file');
 		o.value('syslog', 'syslog');
-
 		o.default = 'stdout';
 
 		addValue(
@@ -230,7 +284,12 @@ return view.extend({
 				 '/var/log/i2pd/i2pd.log'
 		);
 
-		o = s.option(form.ListValue, 'loglevel', _('Log level'));
+		o = s.taboption(
+			'logging',
+			form.ListValue,
+				'loglevel',
+				_('Log level')
+		);
 
 		o.value('debug', 'debug');
 		o.value('info', 'info');
@@ -238,7 +297,6 @@ return view.extend({
 		o.value('error', 'error');
 		o.value('critical', 'critical');
 		o.value('none', 'none');
-
 		o.default = 'info';
 
 		addFlag(
@@ -249,7 +307,11 @@ return view.extend({
 		);
 
 
-		s = addSection(m, _('NTCP2'));
+		/* =========================================================
+		 * NTCP2
+		 * ======================================================= */
+
+		tab(s, 'ntcp2', _('NTCP2'));
 
 		addFlag(
 			s,
@@ -271,7 +333,12 @@ return view.extend({
 			_('Port')
 		);
 
-		s = addSection(m, _('SSU2'));
+
+		/* =========================================================
+		 * SSU2
+		 * ======================================================= */
+
+		tab(s, 'ssu2', _('SSU2'));
 
 		addFlag(
 			s,
@@ -293,7 +360,12 @@ return view.extend({
 			_('Port')
 		);
 
-		s = addSection(m, _('HTTP'));
+
+		/* =========================================================
+		 * HTTP
+		 * ======================================================= */
+
+		tab(s, 'http', _('HTTP'));
 
 		addFlag(
 			s,
@@ -306,7 +378,7 @@ return view.extend({
 			s,
 			'http_address',
 			_('Address'),
-				 '127.0.0.1'
+				 '192.168.1.1'
 		);
 
 		addPort(
@@ -346,14 +418,19 @@ return view.extend({
 
 		o.password = true;
 
-		o = addValue(
+		addValue(
 			s,
 			'http_lang',
 			_('Language'),
-					 'english'
+				 'english'
 		);
 
-		s = addSection(m, _('HTTP Proxy'));
+
+		/* =========================================================
+		 * HTTP PROXY
+		 * ======================================================= */
+
+		tab(s, 'httpproxy', _('HTTP Proxy'));
 
 		addFlag(
 			s,
@@ -366,7 +443,7 @@ return view.extend({
 			s,
 			'httpproxy_address',
 			_('Address'),
-				 '127.0.0.1'
+				 '192.168.1.1'
 		);
 
 		addPort(
@@ -397,7 +474,12 @@ return view.extend({
 				 'http://false.i2p'
 		);
 
-		s = addSection(m, _('SOCKS Proxy'));
+
+		/* =========================================================
+		 * SOCKS PROXY
+		 * ======================================================= */
+
+		tab(s, 'socksproxy', _('SOCKS Proxy'));
 
 		addFlag(
 			s,
@@ -410,7 +492,7 @@ return view.extend({
 			s,
 			'socksproxy_address',
 			_('Address'),
-				 '127.0.0.1'
+				 '192.168.1.1'
 		);
 
 		addPort(
@@ -438,7 +520,7 @@ return view.extend({
 			s,
 			'socksproxy_outproxy',
 			_('Outproxy address'),
-				 '127.0.0.1'
+				 '192.168.1.1'
 		);
 
 		addPort(
@@ -448,155 +530,119 @@ return view.extend({
 				'9050'
 		);
 
-		s = addSection(m, _('SAM'));
+
+		/* =========================================================
+		 * OTHER PROTOCOLS
+		 * ======================================================= */
+
+		tab(s, 'protocols', _('Other Protocols'));
 
 		addFlag(
 			s,
-			'sam_enabled',
-			_('Enabled'),
+		  'sam_enabled',
+		  _('SAM enabled'),
 				'0'
 		);
 
 		addValue(
 			s,
-			'sam_address',
-			_('Address'),
-				 '127.0.0.1'
+		   'sam_address',
+		   _('SAM address'),
+				 '192.168.1.1'
 		);
 
 		addPort(
 			s,
-			'sam_port',
-			_('TCP port'),
+		  'sam_port',
+		  _('SAM TCP port'),
 				'7656'
 		);
 
 		addPort(
 			s,
 		  'sam_portudp',
-		  _('UDP port'),
+		  _('SAM UDP port'),
 				'7655'
 		);
-
-		s = addSection(m, _('BOB'));
 
 		addFlag(
 			s,
 		  'bob_enabled',
-		  _('Enabled'),
+		  _('BOB enabled'),
 				'0'
 		);
 
 		addValue(
 			s,
 		   'bob_address',
-		   _('Address'),
-				 '127.0.0.1'
+		   _('BOB address'),
+				 '192.168.1.1'
 		);
 
 		addPort(
 			s,
 		  'bob_port',
-		  _('Port'),
+		  _('BOB port'),
 				'2827'
 		);
-
-		s = addSection(m, _('I2CP'));
 
 		addFlag(
 			s,
 		  'i2cp_enabled',
-		  _('Enabled'),
+		  _('I2CP enabled'),
 				'0'
 		);
 
 		addValue(
 			s,
 		   'i2cp_address',
-		   _('Address'),
-				 '127.0.0.1'
+		   _('I2CP address'),
+				 '192.168.1.1'
 		);
 
 		addPort(
 			s,
 		  'i2cp_port',
-		  _('Port'),
+		  _('I2CP port'),
 				'7654'
 		);
-
-		s = addSection(m, _('I2PControl'));
 
 		addFlag(
 			s,
 		  'i2pcontrol_enabled',
-		  _('Enabled'),
+		  _('I2PControl enabled'),
 				'0'
 		);
 
 		addValue(
 			s,
 		   'i2pcontrol_address',
-		   _('Address'),
-				 '127.0.0.1'
+		   _('I2PControl address'),
+				 '192.168.1.1'
 		);
 
 		addPort(
 			s,
 		  'i2pcontrol_port',
-		  _('Port'),
+		  _('I2PControl port'),
 				'7650'
 		);
 
 		o = addValue(
 			s,
 			'i2pcontrol_password',
-			_('Password'),
+			_('I2PControl password'),
 					 'itoopie'
 		);
 
 		o.password = true;
 
-		s = addSection(m, _('Precomputation'));
 
-		addFlag(
-			s,
-		  'precomputation_elgamal',
-		  _('ElGamal precomputation'),
-				'0'
-		);
+		/* =========================================================
+		 * RESEED
+		 * ======================================================= */
 
-		s = addSection(m, _('UPnP'));
-
-		addFlag(
-			s,
-		  'upnp_enabled',
-		  _('Enabled'),
-				'0'
-		);
-
-		addValue(
-			s,
-		   'upnp_name',
-		   _('Name'),
-				 'I2Pd'
-		);
-
-		s = addSection(m, _('Meshnets'));
-
-		addFlag(
-			s,
-		  'meshnets_yggdrasil',
-		  _('Yggdrasil'),
-				'0'
-		);
-
-		addValue(
-			s,
-		   'meshnets_yggaddress',
-		   _('Yggdrasil address')
-		);
-
-		s = addSection(m, _('Reseed'));
+		tab(s, 'reseed', _('Reseed'));
 
 		addFlag(
 			s,
@@ -652,7 +698,12 @@ return view.extend({
 				'0'
 		);
 
-		s = addSection(m, _('Addressbook'));
+
+		/* =========================================================
+		 * ADDRESSBOOK
+		 * ======================================================= */
+
+		tab(s, 'addressbook', _('Addressbook'));
 
 		addValue(
 			s,
@@ -668,7 +719,53 @@ return view.extend({
 				 'http://reg.i2p/hosts.txt,http://identiguy.i2p/hosts.txt,http://stats.i2p/cgi-bin/newhosts.txt'
 		);
 
-		s = addSection(m, _('Limits'));
+
+		/* =========================================================
+		 * MESHNETS
+		 * ======================================================= */
+
+		tab(s, 'mesh', _('Meshnets'));
+
+		addFlag(
+			s,
+		  'meshnets_yggdrasil',
+		  _('Yggdrasil'),
+				'0'
+		);
+
+		addValue(
+			s,
+		   'meshnets_yggaddress',
+		   _('Yggdrasil address')
+		);
+
+
+		/* =========================================================
+		 * UPNP
+		 * ======================================================= */
+
+		tab(s, 'upnp', _('UPnP'));
+
+		addFlag(
+			s,
+		  'upnp_enabled',
+		  _('Enabled'),
+				'0'
+		);
+
+		addValue(
+			s,
+		   'upnp_name',
+		   _('Name'),
+				 'I2Pd'
+		);
+
+
+		/* =========================================================
+		 * LIMITS
+		 * ======================================================= */
+
+		tab(s, 'limits', _('Limits'));
 
 		addValue(
 			s,
@@ -694,7 +791,12 @@ return view.extend({
 		   'uinteger'
 		);
 
-		s = addSection(m, _('Trust'));
+
+		/* =========================================================
+		 * TRUST
+		 * ======================================================= */
+
+		tab(s, 'trust', _('Trust'));
 
 		addFlag(
 			s,
@@ -725,7 +827,12 @@ return view.extend({
 				'0'
 		);
 
-		s = addSection(m, _('Exploratory'));
+
+		/* =========================================================
+		 * EXPLORATORY
+		 * ======================================================= */
+
+		tab(s, 'exploratory', _('Exploratory'));
 
 		addValue(
 			s,
@@ -759,7 +866,12 @@ return view.extend({
 		   'uinteger'
 		);
 
-		s = addSection(m, _('Persist'));
+
+		/* =========================================================
+		 * PERSISTENCE
+		 * ======================================================= */
+
+		tab(s, 'persist', _('Persistence'));
 
 		addFlag(
 			s,
@@ -775,7 +887,26 @@ return view.extend({
 				'1'
 		);
 
-		s = addSection(m, _('Advanced'));
+
+		/* =========================================================
+		 * PRECOMPUTATION
+		 * ======================================================= */
+
+		tab(s, 'precomputation', _('Precomputation'));
+
+		addFlag(
+			s,
+		  'precomputation_elgamal',
+		  _('ElGamal precomputation'),
+				'0'
+		);
+
+
+		/* =========================================================
+		 * PROCESS
+		 * ======================================================= */
+
+		tab(s, 'process', _('Process'));
 
 		addFlag(
 			s,
@@ -784,6 +915,11 @@ return view.extend({
 				'0',
 		  _('Keep disabled. OpenWrt procd manages the i2pd process.')
 		);
+
+
+		/* =========================================================
+		 * SAVE & APPLY
+		 * ======================================================= */
 
 		m.handleSaveApply = function(ev, mode) {
 			return form.Map.prototype.handleSaveApply.call(this, ev, mode)

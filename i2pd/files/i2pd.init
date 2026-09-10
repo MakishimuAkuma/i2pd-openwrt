@@ -9,23 +9,83 @@ USER=i2pd
 GROUP=i2pd
 PIDFILE=/var/run/i2pd.pid
 DATADIR=/var/lib/i2pd
-RUNTIMECONF=/tmp/i2pd.conf
+RUNTIMECONF=/var/lib/i2pd.conf
 TUNDIR=/etc/i2pd/tunnels.d
 CERTSDIR=/usr/share/i2pd/certificates
 
 start_instance() {
-	local cfg="$1" data_dir
+	local cfg="$1"
+	local data_dir netdb_dir addressbook_dir
+
 	config_get data_dir "$cfg" data_dir "$DATADIR"
+	config_get netdb_dir "$cfg" netdb_dir ""
+	config_get addressbook_dir "$cfg" addressbook_dir ""
 
 	[ -n "$data_dir" ] || data_dir="$DATADIR"
-	mkdir -p "$data_dir" "$TUNDIR"
-	chown "$USER:$GROUP" "$data_dir"
-	chown -R "$USER:$GROUP" "$TUNDIR"
 
+	# Main data directory
+	mkdir -p "$data_dir" || return 1
+	chown "$USER:$GROUP" "$data_dir" || return 1
+
+	# Tunnels
+	mkdir -p "$TUNDIR" || return 1
+	chown -R "$USER:$GROUP" "$TUNDIR" || return 1
+
+	# NetDB
+	if [ -n "$netdb_dir" ]; then
+		mkdir -p "$netdb_dir" || return 1
+		chown "$USER:$GROUP" "$netdb_dir" || return 1
+
+		# If NetDB is already inside data_dir, use it directly.
+		case "$netdb_dir" in
+			"$data_dir"|"$data_dir"/*)
+				;;
+			*)
+				if [ -e "$data_dir/netDb" ] && [ ! -L "$data_dir/netDb" ]; then
+					rm -rf "$data_dir/netDb"
+				fi
+
+				ln -sfn "$netdb_dir" "$data_dir/netDb"
+				;;
+		esac
+	else
+		mkdir -p "$data_dir/netDb" || return 1
+		chown "$USER:$GROUP" "$data_dir/netDb" || return 1
+	fi
+
+	# Addressbook
+	if [ -n "$addressbook_dir" ]; then
+		mkdir -p "$addressbook_dir" || return 1
+		chown "$USER:$GROUP" "$addressbook_dir" || return 1
+
+		# If Addressbook is already inside data_dir, use it directly.
+		case "$addressbook_dir" in
+			"$data_dir"|"$data_dir"/*)
+				;;
+			*)
+				if [ -e "$data_dir/addressbook" ] && [ ! -L "$data_dir/addressbook" ]; then
+					rm -rf "$data_dir/addressbook"
+				fi
+
+				ln -sfn "$addressbook_dir" "$data_dir/addressbook"
+				;;
+		esac
+	else
+		mkdir -p "$data_dir/addressbook" || return 1
+		chown "$USER:$GROUP" "$data_dir/addressbook" || return 1
+	fi
+
+	# Certificates
 	rm -rf "$data_dir/certificates"
-	ln -s "$CERTSDIR" "$data_dir/certificates"
+	ln -s /usr/share/i2pd/certificates "$data_dir/certificates"
 
-	/usr/libexec/i2pd/generate-config || return 1
+	/usr/libexec/i2pd/generate-config "$RUNTIMECONF" || return 1
+
+	[ -r "$RUNTIMECONF" ] || {
+		logger -t i2pd "missing generated config: $RUNTIMECONF"
+		return 1
+	}
+
 	touch "$PIDFILE"
 	chown "$USER:$GROUP" "$PIDFILE"
 
@@ -48,9 +108,7 @@ start_service() {
 }
 
 stop_service() {
-	procd_kill i2pd
-	sleep 5
-	rm -f "$PIDFILE"
+	rm -f "$RUNTIMECONF"
 }
 
 reload_service() {
