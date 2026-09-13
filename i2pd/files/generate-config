@@ -2,7 +2,7 @@
 
 set -e
 
-OUTPUT="${1:-/var/lib/i2pd.conf}"
+OUTPUT="${1:-/var/lib/i2pd/i2pd.conf}"
 TMP="${OUTPUT}.tmp.$$"
 
 # ---------------------------------------------------------------------------
@@ -30,6 +30,43 @@ uci_get_optional() {
 	value="$(uci -q get "i2pd.main.${option}" 2>/dev/null || true)"
 
 	printf '%s' "$value"
+}
+
+# Read a UCI option that may be stored as a list and return its values
+# as a comma-separated string for i2pd.conf.
+#
+# This also keeps compatibility with the old format where the option was
+# stored as a single comma-separated "option" value.
+uci_get_list_csv() {
+	local option="$1"
+	local default="$2"
+	local value
+	local result=""
+
+	# UCI can represent a list as:
+	#
+	#   i2pd.main.option='value1' 'value2' 'value3'
+	#
+	# Split the quoted elements first, then remove their quotes and join
+	# them with commas for the i2pd.conf syntax.
+	while IFS= read -r value; do
+		[ -n "$value" ] || continue
+
+		if [ -n "$result" ]; then
+			result="${result},${value}"
+		else
+			result="$value"
+		fi
+	done <<EOF
+$(uci -q show "i2pd.main.${option}" 2>/dev/null | \
+	sed "s/^[^=]*=//; s/' '/\\n/g; s/^'//; s/'$//" || true)
+EOF
+
+	if [ -n "$result" ]; then
+		printf '%s' "$result"
+	else
+		uci_get "$option" "$default"
+	fi
 }
 
 emit() {
@@ -390,11 +427,11 @@ emit_bool "verify" \
 	"$(uci_get reseed_verify "1")"
 
 emit_optional "urls" \
-	"$(uci_get reseed_urls \
+	"$(uci_get_list_csv reseed_urls \
 		"https://reseed.i2p-projekt.de/,https://i2p.mooo.com/netDb/,https://netdb.i2p2.no/")"
 
 emit_optional "yggurls" \
-	"$(uci_get reseed_yggurls \
+	"$(uci_get_list_csv reseed_yggurls \
 		"http://[324:71e:281a:9ed3::ace]:7070/")"
 
 emit_optional "file" \
@@ -423,7 +460,7 @@ emit_optional "defaulturl" \
 		"http://shx5vqsw7usdaunyzr2qmes2fq37oumybpudrd4jjj4e4vk4uusa.b32.i2p/hosts.txt")"
 
 emit_optional "subscriptions" \
-	"$(uci_get addressbook_subscriptions \
+	"$(uci_get_list_csv addressbook_subscriptions \
 		"http://reg.i2p/hosts.txt,http://identiguy.i2p/hosts.txt,http://stats.i2p/cgi-bin/newhosts.txt")"
 
 # ---------------------------------------------------------------------------
@@ -488,6 +525,144 @@ emit_bool "profiles" \
 
 emit_bool "addressbook" \
 	"$(uci_get persist_addressbook "1")"
+
+
+# ---------------------------------------------------------------------------
+# Tunnel configuration files
+# ---------------------------------------------------------------------------
+
+sanitize_filename() {
+	local value="$1"
+	value="$(printf '%s' "$value" | tr '/\\' '__' | tr -cd 'A-Za-z0-9._-')"
+	[ -n "$value" ] || value="tunnel"
+
+printf '%s' "$value"
+}
+
+uci_get_section_optional() {
+	local section="$1"
+	local option="$2"
+	local value
+	value="$(uci -q get "i2pd.${section}.${option}" 2>/dev/null || true)"
+
+printf '%s' "$value"
+}
+
+uci_get_section_list() {
+	local section="$1"
+	local option="$2"
+	uci -q show "i2pd.${section}.${option}" 2>/dev/null | \
+		sed "s/^[^=]*=//; s/' '/\n/g; s/^'//; s/'$//" || true
+}
+
+emit_tunnel_option() {
+	local section="$1" option="$2" key="$3" value
+	value="$(uci_get_section_optional "$section" "$option")"
+	[ -n "$value" ] || return 0
+
+printf '%s = %s\n' "$key" "$value" >> "$TUNNEL_TMP"
+}
+
+emit_tunnel_bool() {
+	local section="$1" option="$2" key="$3" value
+	value="$(uci_get_section_optional "$section" "$option")"
+	[ -n "$value" ] || return 0
+	case "$value" in
+		1|true|yes|on) printf '%s = true\n' "$key" >> "$TUNNEL_TMP" ;;
+		0|false|no|off) printf '%s = false\n' "$key" >> "$TUNNEL_TMP" ;;
+	esac
+}
+
+generate_tunnels() {
+	local tunnels_dir="$1"
+	local manifest="/var/lib/i2pd/.luci-tunnels"
+	local old section name filename output extra key value tmp
+
+	mkdir -p "$tunnels_dir" /var/lib/i2pd
+
+	if [ -f "$manifest" ]; then
+		while IFS= read -r old; do
+			[ -n "$old" ] || continue
+			rm -f "$tunnels_dir/$old"
+		done < "$manifest"
+	fi
+
+	tmp="${manifest}.tmp.$$"
+	: > "$tmp"
+
+	while IFS= read -r section; do
+		[ -n "$section" ] || continue
+
+		name="$(uci_get_section_optional "$section" name)"
+		[ -n "$name" ] || name="$section"
+		filename="$(sanitize_filename "$name").conf"
+		output="$tunnels_dir/$filename"
+		# Disabled LuCI tunnels must not produce a .conf file.
+		case "$(uci_get_section_optional "$section" enabled)" in
+			0|false|no|off) continue ;;
+		esac
+
+		TUNNEL_TMP="${output}.tmp.$$"
+		: > "$TUNNEL_TMP"
+
+		printf '[%s]\n' "$name" >> "$TUNNEL_TMP"
+		emit_tunnel_option "$section" type type
+		emit_tunnel_option "$section" address address
+		emit_tunnel_option "$section" port port
+		emit_tunnel_option "$section" inport inport
+		emit_tunnel_option "$section" host host
+		emit_tunnel_option "$section" webircpassword webircpassword
+		emit_tunnel_option "$section" destination destination
+		emit_tunnel_option "$section" destinationport destinationport
+		emit_tunnel_option "$section" keys keys
+		emit_tunnel_option "$section" signaturetype signaturetype
+		emit_tunnel_option "$section" accesslist accesslist
+		emit_tunnel_option "$section" inbound_length inbound.length
+		emit_tunnel_option "$section" inbound_quantity inbound.quantity
+		emit_tunnel_option "$section" inbound_lengthVariance inbound.lengthVariance
+		emit_tunnel_option "$section" outbound_length outbound.length
+		emit_tunnel_option "$section" outbound_quantity outbound.quantity
+		emit_tunnel_option "$section" outbound_lengthVariance outbound.lengthVariance
+		emit_tunnel_option "$section" i2cp_leaseSetType i2cp.leaseSetType
+		emit_tunnel_option "$section" i2cp_leaseSetEncType i2cp.leaseSetEncType
+		emit_tunnel_option "$section" i2cp_leaseSetPrivKey i2cp.leaseSetPrivKey
+		emit_tunnel_option "$section" i2p_streaming_profile i2p.streaming.profile
+		emit_tunnel_option "$section" i2p_streaming_maxWindowSize i2p.streaming.maxWindowSize
+		emit_tunnel_option "$section" i2p_streaming_maxOutboundSpeed i2p.streaming.maxOutboundSpeed
+		emit_tunnel_option "$section" i2p_streaming_maxInboundSpeed i2p.streaming.maxInboundSpeed
+		emit_tunnel_option "$section" latency_min latency.min
+		emit_tunnel_option "$section" latency_max latency.max
+		emit_tunnel_option "$section" outproxy outproxy
+		emit_tunnel_option "$section" outproxyport outproxyport
+		emit_tunnel_bool "$section" outproxy_enabled outproxy.enabled
+
+		while IFS= read -r extra; do
+			[ -n "$extra" ] || continue
+			key="${extra%%=*}"
+			value="${extra#*=}"
+			[ "$key" != "$extra" ] || continue
+			[ -n "$key" ] && [ -n "$value" ] || continue
+			printf '%s = %s\n' "$key" "$value" >> "$TUNNEL_TMP"
+		done <<EOF
+$(uci_get_section_list "$section" extra)
+EOF
+
+		chmod 0644 "$TUNNEL_TMP"
+		mv -f "$TUNNEL_TMP" "$output"
+		printf '%s\n' "$filename" >> "$tmp"
+	done <<EOF
+$(uci -q show i2pd 2>/dev/null | sed -n "s/^i2pd\.\([^.=]*\)=tunnel$/\1/p" || true)
+EOF
+
+	chmod 0644 "$tmp"
+	mv -f "$tmp" "$manifest"
+}
+
+# ---------------------------------------------------------------------------
+# Generate individual tunnel files
+# ---------------------------------------------------------------------------
+
+generate_tunnels "$(uci_get tunnelsdir "/etc/i2pd/tunnels.d")"
 
 # ---------------------------------------------------------------------------
 # Install atomically

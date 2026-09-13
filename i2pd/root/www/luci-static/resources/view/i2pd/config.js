@@ -651,19 +651,35 @@ return view.extend({
 				'1'
 		);
 
-		addValue(
-			s,
-		   'reseed_urls',
-		   _('Reseed URLs'),
-				 'https://reseed.i2p-projekt.de/,https://i2p.mooo.com/netDb/,https://netdb.i2p2.no/'
+		o = s.taboption(
+			'reseed',
+			form.DynamicList,
+				'reseed_urls',
+				_('Reseed URLs')
 		);
+		o.datatype = 'url';
+		o.default = [
+			'https://reseed.i2p-projekt.de/',
+			'https://i2p.mooo.com/netDb/',
+			'https://netdb.i2p2.no/'
+		];
+		o.placeholder = 'https://reseed.example/';
+		o.rmempty = true;
+		o.description = _('Add one reseed URL per entry.');
 
-		addValue(
-			s,
-		   'reseed_yggurls',
-		   _('Yggdrasil reseed URLs'),
-				 'http://[324:71e:281a:9ed3::ace]:7070/'
+		o = s.taboption(
+			'reseed',
+			form.DynamicList,
+				'reseed_yggurls',
+				_('Yggdrasil reseed URLs')
 		);
+		o.datatype = 'url';
+		o.default = [
+			'http://[324:71e:281a:9ed3::ace]:7070/'
+		];
+		o.placeholder = 'http://[IPv6]:7070/';
+		o.rmempty = true;
+		o.description = _('Add one Yggdrasil reseed URL per entry.');
 
 		addValue(
 			s,
@@ -712,12 +728,21 @@ return view.extend({
 				 'http://shx5vqsw7usdaunyzr2qmes2fq37oumybpudrd4jjj4e4vk4uusa.b32.i2p/hosts.txt'
 		);
 
-		addValue(
-			s,
-		   'addressbook_subscriptions',
-		   _('Subscriptions'),
-				 'http://reg.i2p/hosts.txt,http://identiguy.i2p/hosts.txt,http://stats.i2p/cgi-bin/newhosts.txt'
+		o = s.taboption(
+			'addressbook',
+			form.DynamicList,
+				'addressbook_subscriptions',
+				_('Subscriptions')
 		);
+		o.datatype = 'url';
+		o.default = [
+			'http://reg.i2p/hosts.txt',
+			'http://identiguy.i2p/hosts.txt',
+			'http://stats.i2p/cgi-bin/newhosts.txt'
+		];
+		o.placeholder = 'http://example.i2p/hosts.txt';
+		o.rmempty = true;
+		o.description = _('Add one addressbook subscription URL per entry.');
 
 
 		/* =========================================================

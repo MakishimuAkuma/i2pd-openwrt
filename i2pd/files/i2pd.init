@@ -9,7 +9,7 @@ USER=i2pd
 GROUP=i2pd
 PIDFILE=/var/run/i2pd.pid
 DATADIR=/var/lib/i2pd
-RUNTIMECONF=/var/lib/i2pd.conf
+RUNTIMECONF=/var/lib/i2pd/i2pd.conf
 TUNDIR=/etc/i2pd/tunnels.d
 CERTSDIR=/usr/share/i2pd/certificates
 
@@ -20,6 +20,9 @@ start_instance() {
 	config_get data_dir "$cfg" data_dir "$DATADIR"
 	config_get netdb_dir "$cfg" netdb_dir ""
 	config_get addressbook_dir "$cfg" addressbook_dir ""
+
+	rm -f "$RUNTIMECONF" || return 1
+	rm -f "$TUNDIR/*.conf" || return 1
 
 	[ -n "$data_dir" ] || data_dir="$DATADIR"
 
@@ -75,10 +78,6 @@ start_instance() {
 		chown "$USER:$GROUP" "$data_dir/addressbook" || return 1
 	fi
 
-	# Certificates
-	rm -rf "$data_dir/certificates"
-	ln -s /usr/share/i2pd/certificates "$data_dir/certificates"
-
 	/usr/libexec/i2pd/generate-config "$RUNTIMECONF" || return 1
 
 	[ -r "$RUNTIMECONF" ] || {
@@ -86,8 +85,8 @@ start_instance() {
 		return 1
 	}
 
-	touch "$PIDFILE"
-	chown "$USER:$GROUP" "$PIDFILE"
+	touch "$PIDFILE" || return 1
+	chown "$USER:$GROUP" "$PIDFILE" || return 1
 
 	procd_open_instance
 	procd_set_param command "$PROG" --datadir="$data_dir" --conf="$RUNTIMECONF" --pidfile "$PIDFILE"
@@ -108,7 +107,8 @@ start_service() {
 }
 
 stop_service() {
-	rm -f "$RUNTIMECONF"
+	rm -f "$RUNTIMECONF" || return 1
+	rm -f "$PIDFILE" || return 1
 }
 
 reload_service() {

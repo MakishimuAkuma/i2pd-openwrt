@@ -8,15 +8,15 @@ const callStatus = rpc.declare({ object: 'luci.i2pd', method: 'status' });
 return view.extend({
 	load: function() {
 		return callStatus().then(function(status) {
-			return status?.tunnels_dir || '/var/lib/i2pd/tunnels.d';
+			return status?.tunnels_dir || '/etc/i2pd/tunnels.d';
 		}).catch(function() {
-			return '/var/lib/i2pd/tunnels.d';
+			return '/etc/i2pd/tunnels.d';
 		});
 	},
 
 	render: function(tunnelsDir) {
 		let m = new form.Map('i2pd', _('i2pd tunnels'),
-							 _('Each active tunnel configuration is processed from: %s').format(tunnelsDir));
+							 _('Tunnel configuration files are generated in: %s').format(tunnelsDir));
 
 		let s = m.section(form.TypedSection, 'tunnel', _('Tunnels'));
 		s.anonymous = true;
