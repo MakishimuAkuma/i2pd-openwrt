@@ -1,84 +1,236 @@
 name: Build i2pd OpenWrt 25.12 APKs
 
 on:
-  release:
-    types:
-      - published
-
+  schedule:
+    - cron: "0 */6 * * *"
   workflow_dispatch:
-    inputs:
-      release_tag:
-        description: "Existing GitHub Release tag"
-        required: true
-        type: string
 
 permissions:
   contents: write
 
 env:
-  OPENWRT_BRANCH: openwrt-25.12
+  OPENWRT_VERSION: 25.12.5
+  FEED_BRANCH: gh-pages
+  FEED_ROOT: 25.12
 
 jobs:
-  prepare:
-    name: Prepare release
-    runs-on: ubuntu-latest
+  check:
+    name: Check i2pd stable release
+    runs-on: [self-hosted, Linux, X64]
 
     outputs:
-      release_tag: ${{ steps.release.outputs.tag }}
+      build: ${{ steps.check.outputs.build }}
+      version: ${{ steps.check.outputs.version }}
+      tag: ${{ steps.check.outputs.tag }}
+      hash: ${{ steps.check.outputs.hash }}
 
     steps:
-      - name: Resolve release tag
-        id: release
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Check runner dependencies
+        shell: bash
+        run: |
+          set -euxo pipefail
+          command -v curl
+          command -v jq
+          command -v git
+          command -v sha256sum
+          command -v docker
+          sudo -n true
+
+      - name: Check latest stable i2pd release
+        id: check
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -euxo pipefail
+          set -euo pipefail
 
-          if [ "${{ github.event_name }}" = "release" ]; then
-            tag="${{ github.event.release.tag_name }}"
+          api="https://api.github.com/repos/PurpleI2P/i2pd/releases/latest"
+
+          release="$(
+            curl -fsSL \
+              -H 'Accept: application/vnd.github+json' \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              "$api" |
+            jq -er '
+              [
+                .[]
+                | select(.draft == false and .prerelease == false)
+                | select(.tag_name | test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))
+              ]
+              | sort_by(
+                  .tag_name
+                  | split(".")
+                  | map(tonumber)
+                )
+              | last
+            '
+          )"
+
+          version="$(jq -er '.tag_name' <<<"$release")"
+          tag="v${version}"
+
+          current="$(
+            sed -n 's/^PKG_VERSION:=//p' i2pd/Makefile |
+            head -n 1
+          )"
+
+          test -n "$current"
+
+          echo "Upstream stable: $version"
+          echo "Package version: $current"
+
+          source_url="https://github.com/PurpleI2P/i2pd/archive/refs/tags/${version}.tar.gz"
+
+          tmp="$(mktemp)"
+          trap 'rm -f "$tmp"' EXIT
+
+          curl -fL --retry 3 --retry-delay 2 \
+            "$source_url" \
+            -o "$tmp"
+
+          hash="$(sha256sum "$tmp" | awk '{print $1}')"
+
+          echo "Source SHA256: $hash"
+
+          release_status="$(
+            curl -sS -o /dev/null -w '%{http_code}' \
+              -H 'Accept: application/vnd.github+json' \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${tag}"
+          )"
+
+          if [ "$current" = "$version" ]; then
+            if [ "$release_status" = "200" ]; then
+              echo "i2pd $tag is already published."
+              build=false
+            elif [ "$release_status" = "404" ]; then
+              echo "i2pd $tag is not published. Rebuilding."
+              build=true
+            else
+              echo "Unexpected GitHub Release API status: $release_status"
+              exit 1
+            fi
+          elif [ "$(printf '%s\n' "$current" "$version" | sort -V | tail -n1)" = "$current" ]; then
+            echo "Local package version $current is newer than upstream $version."
+            build=false
           else
-            tag="${{ inputs.release_tag }}"
+            echo "New stable i2pd version: $current -> $version"
+            build=true
           fi
 
-          test -n "$tag"
+          {
+            echo "build=$build"
+            echo "version=$version"
+            echo "tag=$tag"
+            echo "hash=$hash"
+          } >> "$GITHUB_OUTPUT"
 
-          echo "Release tag: $tag"
+  discover:
+    name: Discover OpenWrt architectures
+    runs-on: [self-hosted, Linux, X64]
+    needs: check
+    if: needs.check.outputs.build == 'true'
 
-          gh release view "$tag" \
-            --repo "$GITHUB_REPOSITORY" >/dev/null
+    outputs:
+      matrix: ${{ steps.arch.outputs.matrix }}
+      count: ${{ steps.arch.outputs.count }}
 
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+    steps:
+      - name: Discover architectures
+        id: arch
+        shell: bash
+        run: |
+          set -euo pipefail
 
-  build-i2pd:
+          base="https://downloads.openwrt.org/releases/${OPENWRT_VERSION}/packages"
+
+          CANDIDATES=(
+            arm_cortex-a5_vfpv4
+            arm_cortex-a7
+            arm_cortex-a7_neon-vfpv4
+            arm_cortex-a8_vfpv3
+            arm_cortex-a9
+            arm_cortex-a9_vfpv3-d16
+            arm_cortex-a9_neon
+            arm_cortex-a15_neon-vfpv4
+            aarch64_cortex-a53
+            aarch64_cortex-a72
+            aarch64_cortex-a76
+            aarch64_generic
+            rockchip-armv8
+            mips_24kc
+            mips_mips32
+            mipsel_24kc
+            mipsel_24kc_24kf
+            mipsel_74kc
+            mipsel_mips32
+            mips64_octeonplus
+            riscv64_generic
+            loongarch64_generic
+            i386_pentium4
+            x86_64
+          )
+
+          arches=()
+
+          for arch in "${CANDIDATES[@]}"; do
+            if curl -fsSI --max-time 15 "${base}/${arch}/" >/dev/null 2>&1; then
+              arches+=("$arch")
+            fi
+          done
+
+          test "${#arches[@]}" -gt 0
+
+          matrix="$(
+            printf '%s\n' "${arches[@]}" |
+            jq -Rsc '{arch: split("\n") | map(select(length > 0))}'
+          )"
+
+          echo "$matrix" | jq .
+
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "count=${#arches[@]}" >> "$GITHUB_OUTPUT"
+
+  build:
     name: i2pd / ${{ matrix.arch }}
-    runs-on: ubuntu-latest
-    needs: prepare
+    runs-on: [self-hosted, Linux, X64]
+    needs:
+      - check
+      - discover
+    if: needs.check.outputs.build == 'true'
 
     strategy:
       fail-fast: false
       matrix:
-        arch:
-          - arm_cortex-a7
-          - arm_cortex-a9
-          - arm_cortex-a15_neon-vfpv4
-          - aarch64_cortex-a53
-          - aarch64_cortex-a72
-          - rockchip-armv8
-          - aarch64_generic
-          - i386_pentium4
-          - x86_64
-          - mipsel_24kc
-          - mips_mips32
-          - mips64_octeonplus
-          - riscv64_generic
+        arch: ${{ fromJSON(needs.discover.outputs.matrix).arch }}
 
     steps:
-      - name: Checkout release tag
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.prepare.outputs.release_tag }}
-          fetch-depth: 0
+          fetch-depth: 1
+
+      - name: Update i2pd version and source hash
+        shell: bash
+        env:
+          I2PD_VERSION: ${{ needs.check.outputs.version }}
+          I2PD_HASH: ${{ needs.check.outputs.hash }}
+        run: |
+          set -euxo pipefail
+
+          sed -i \
+            -e "s/^PKG_VERSION:=.*/PKG_VERSION:=${I2PD_VERSION}/" \
+            -e "s/^PKG_HASH:=.*/PKG_HASH:=${I2PD_HASH}/" \
+            i2pd/Makefile
+
+          grep -E '^PKG_(VERSION|HASH):=' i2pd/Makefile
 
       - name: Verify package files
         shell: bash
@@ -98,95 +250,173 @@ jobs:
           test -f i2pd/root/www/luci-static/resources/view/i2pd/tunnels.js
           test -f i2pd/root/www/luci-static/resources/view/i2pd/status.js
 
+      - name: Prepare APK signing key
+        shell: bash
+        env:
+          APK_SIGNING_KEY: ${{ secrets.APK_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+
+          test -n "$APK_SIGNING_KEY"
+
+          printf '%s\n' "$APK_SIGNING_KEY" > "$RUNNER_TEMP/i2pd-apk-signing-key.pem"
+          chmod 600 "$RUNNER_TEMP/i2pd-apk-signing-key.pem"
+
       - name: Build i2pd
         uses: openwrt/gh-action-sdk@main
         env:
-          ARCH: ${{ matrix.arch }}-${{ env.OPENWRT_BRANCH }}
+          ARCH: ${{ matrix.arch }}-${{ env.OPENWRT_VERSION }}
           FEEDNAME: action
           PACKAGES: i2pd
+          INDEX: 1
+          PRIVATE_KEY: ${{ runner.temp }}/i2pd-apk-signing-key.pem
           NO_REFRESH_CHECK: 1
           NO_SHFMT_CHECK: 1
           BUILD_LOG: 1
           V: s
 
-      - name: Find and rename APK
-        id: apk
+      - name: Collect APK and feed
+        id: collect
         shell: bash
         run: |
           set -euo pipefail
 
-          apk="$(find bin -type f -name 'i2pd-*.apk' | head -n 1)"
-
-          test -n "$apk"
-          test -f "$apk"
-
-          version="$(sed -n 's/^PKG_VERSION:=//p' i2pd/Makefile | head -n 1)"
+          version="${{ needs.check.outputs.version }}"
           release="$(sed -n 's/^PKG_RELEASE:=//p' i2pd/Makefile | head -n 1)"
 
-          test -n "$version"
           test -n "$release"
+
+          apk="$(find bin -type f -name "i2pd-${version}-*.apk" | head -n 1)"
+          adb="$(find bin -type f -name 'packages.adb' | head -n 1)"
+          pub="$(find bin -type f -name '*.pub.pem' | head -n 1)"
+
+          test -n "$apk"
+          test -n "$adb"
+          test -n "$pub"
+
+          mkdir -p "artifacts/release" "artifacts/feed/${{ matrix.arch }}"
 
           output="i2pd-${version}-r${release}-${{ matrix.arch }}.apk"
 
-          echo "Source APK: $apk"
-          echo "Output APK: $output"
+          cp "$apk" "artifacts/release/$output"
+          cp "$adb" "artifacts/feed/${{ matrix.arch }}/packages.adb"
+          cp "$pub" "artifacts/feed/${{ matrix.arch }}/i2pd-feed.pub.pem"
 
-          mkdir -p release
-          cp "$apk" "release/$output"
+          test -f "artifacts/release/$output"
+          test -f "artifacts/feed/${{ matrix.arch }}/packages.adb"
+          test -f "artifacts/feed/${{ matrix.arch }}/i2pd-feed.pub.pem"
 
-          test -f "release/$output"
+          echo "APK: artifacts/release/$output"
 
-          echo "path=release/$output" >> "$GITHUB_OUTPUT"
-
-      - name: Upload APK artifact
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: i2pd-${{ matrix.arch }}
-          path: ${{ steps.apk.outputs.path }}
+          path: artifacts
           if-no-files-found: error
           retention-days: 7
 
-  publish:
-    name: Upload APKs to release
-    runs-on: ubuntu-latest
+  release:
+    name: Create GitHub Release
+    runs-on: [self-hosted, Linux, X64]
     needs:
-      - prepare
-      - build-i2pd
+      - check
+      - discover
+      - build
+    if: needs.check.outputs.build == 'true'
 
     steps:
-      - name: Download APKs
+      - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          path: release
+          path: artifacts
           pattern: i2pd-*
           merge-multiple: true
 
-      - name: Show APKs
+      - name: Verify build output
         shell: bash
         run: |
           set -euxo pipefail
 
-          echo "APK files:"
+          expected="${{ needs.discover.outputs.count }}"
+          found="$(find artifacts/release -type f -name '*.apk' | wc -l)"
 
-          find release \
-            -type f \
-            -name '*.apk' \
-            -print \
-            | sort
+          echo "Expected APKs: $expected"
+          echo "Found APKs:    $found"
 
-          count="$(find release \
-            -type f \
-            -name 'i2pd-*.apk' \
-            | wc -l)"
+          test "$found" -eq "$expected"
 
-          echo "Found $count APK(s)"
+          for arch in $(echo '${{ needs.discover.outputs.matrix }}' | jq -r '.arch[]'); do
+            test -f "artifacts/feed/${arch}/packages.adb"
+          done
 
-          test "$count" -eq 13
-
-      - name: Upload APKs to GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ needs.prepare.outputs.release_tag }}
-          files: release/*.apk
+          tag_name: ${{ needs.check.outputs.tag }}
+          name: i2pd ${{ needs.check.outputs.version }}
+          generate_release_notes: true
+          files: |
+            artifacts/release/*.apk
+            artifacts/feed/${{ fromJSON(needs.discover.outputs.matrix).arch[0] }}/i2pd-feed.pub.pem
           fail_on_unmatched_files: true
-          overwrite_files: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Publish APK feed
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          work="$(mktemp -d)"
+          trap 'rm -rf "$work"' EXIT
+
+          git clone --depth 1 \
+            --branch "$FEED_BRANCH" \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "$work/repo"
+
+          cd "$work/repo"
+
+          mkdir -p "$FEED_ROOT"
+
+          for arch in $(echo '${{ needs.discover.outputs.matrix }}' | jq -r '.arch[]'); do
+            mkdir -p "$FEED_ROOT/$arch"
+
+            cp \
+              "${GITHUB_WORKSPACE}/artifacts/feed/${arch}/packages.adb" \
+              "$FEED_ROOT/$arch/packages.adb"
+
+            cp \
+              "${GITHUB_WORKSPACE}/artifacts/feed/${arch}/i2pd-feed.pub.pem" \
+              "$FEED_ROOT/$arch/i2pd-feed.pub.pem"
+          done
+
+          touch .nojekyll
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add "$FEED_ROOT" .nojekyll
+
+          if git diff --cached --quiet; then
+            echo "No feed changes."
+            exit 0
+          fi
+
+          git commit -m "Update i2pd ${{ needs.check.outputs.version }} feeds"
+          git push origin "$FEED_BRANCH"
+
+  skip:
+    name: No new stable release
+    runs-on: [self-hosted, Linux, X64]
+    needs: check
+    if: needs.check.outputs.build != 'true'
+
+    steps:
+      - name: Show status
+        run: |
+          echo "No new i2pd release needs to be built."
+          echo "Current upstream stable: ${{ needs.check.outputs.version }}"
