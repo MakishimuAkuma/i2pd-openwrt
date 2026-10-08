@@ -52,27 +52,22 @@ jobs:
 
           release="$(
             curl -fsSL \
-              -H 'Accept: application/vnd.github+json' \
-              -H "Authorization: Bearer ${GH_TOKEN}" \
-              -H 'X-GitHub-Api-Version: 2022-11-28' \
-              "$api" |
-            jq -er '
-              [
-                .[]
-                | select(.draft == false and .prerelease == false)
-                | select(.tag_name | test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))
-              ]
-              | sort_by(
-                  .tag_name
-                  | split(".")
-                  | map(tonumber)
-                )
-              | last
-            '
-          )"
+                -H 'Accept: application/vnd.github+json' \
+                -H "Authorization: Bearer ${GH_TOKEN}" \
+                -H 'X-GitHub-Api-Version: 2022-11-28' \
+                "$api"
+            )"
 
-          version="$(jq -er '.tag_name' <<<"$release")"
-          tag="v${version}"
+            version="$(jq -er '.tag_name' <<<"$release")"
+
+            # Upstream i2pd uses tags/releases without the "v" prefix.
+            tag="$version"
+
+            # Safety check: only accept stable semantic versions.
+            if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                echo "ERROR: Latest i2pd release has unexpected tag: $version"
+                exit 1
+            fi
 
           current="$(
             sed -n 's/^PKG_VERSION:=//p' i2pd/Makefile |
