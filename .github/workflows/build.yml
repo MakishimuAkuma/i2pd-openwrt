@@ -39,7 +39,6 @@ jobs:
           command -v git
           command -v sha256sum
           command -v docker
-          sudo -n true
 
       - name: Check latest stable i2pd release
         id: check
