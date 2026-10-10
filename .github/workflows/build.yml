@@ -365,9 +365,12 @@ jobs:
           # Every architecture must publish the same trusted public key.
           first_arch="$(echo '${{ needs.discover.outputs.matrix }}' | jq -r '.arch[0]')"
           for arch in $(echo '${{ needs.discover.outputs.matrix }}' | jq -r '.arch[]'); do
-            cmp -s \
-              "artifacts/feed/${first_arch}/i2pd-feed.pub.pem" \
-              "artifacts/feed/${arch}/i2pd-feed.pub.pem"
+            first_key="$(<"artifacts/feed/${first_arch}/i2pd-feed.pub.pem")"
+            current_key="$(<"artifacts/feed/${arch}/i2pd-feed.pub.pem")"
+            if [[ "$first_key" != "$current_key" ]]; then
+              echo "ERROR: Public APK signing key differs for architecture: $arch"
+              exit 1
+            fi
           done
 
       - name: Create GitHub Release
