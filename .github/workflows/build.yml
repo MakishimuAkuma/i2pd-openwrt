@@ -26,7 +26,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
@@ -38,6 +38,7 @@ jobs:
           command -v jq
           command -v git
           command -v sha256sum
+          command -v openssl
           command -v docker
 
       - name: Check latest stable i2pd release
@@ -52,22 +53,22 @@ jobs:
 
           release="$(
             curl -fsSL \
-                -H 'Accept: application/vnd.github+json' \
-                -H "Authorization: Bearer ${GH_TOKEN}" \
-                -H 'X-GitHub-Api-Version: 2022-11-28' \
-                "$api"
-            )"
+              -H 'Accept: application/vnd.github+json' \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              "$api"
+          )"
 
-            version="$(jq -er '.tag_name' <<<"$release")"
+          version="$(jq -er '.tag_name' <<<"$release")"
 
-            # Upstream i2pd uses tags/releases without the "v" prefix.
-            tag="$version"
+          # Upstream i2pd uses tags/releases without the "v" prefix.
+          tag="$version"
 
-            # Safety check: only accept stable semantic versions.
-            if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-                echo "ERROR: Latest i2pd release has unexpected tag: $version"
-                exit 1
-            fi
+          # Safety check: only accept stable semantic versions.
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: Latest i2pd release has unexpected tag: $version"
+            exit 1
+          fi
 
           current="$(
             sed -n 's/^PKG_VERSION:=//p' i2pd/Makefile |
@@ -207,7 +208,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
@@ -251,10 +252,22 @@ jobs:
         run: |
           set -euo pipefail
 
-          test -n "$APK_SIGNING_KEY"
+          if [ -z "$APK_SIGNING_KEY" ]; then
+            echo "ERROR: GitHub Actions secret APK_SIGNING_KEY is empty or missing."
+            exit 1
+          fi
 
-          printf '%s\n' "$APK_SIGNING_KEY" > "$RUNNER_TEMP/i2pd-apk-signing-key.pem"
-          chmod 600 "$RUNNER_TEMP/i2pd-apk-signing-key.pem"
+          private_key="$RUNNER_TEMP/i2pd-apk-signing-key.pem"
+          public_key="$RUNNER_TEMP/i2pd-apk-signing-key.pub.pem"
+
+          printf '%s\n' "$APK_SIGNING_KEY" > "$private_key"
+          chmod 600 "$private_key"
+
+          # Validate the key and derive the matching public key for the feed.
+          openssl pkey -in "$private_key" -check -noout
+          openssl pkey -in "$private_key" -pubout -out "$public_key"
+          chmod 644 "$public_key"
+          test -s "$public_key"
 
       - name: Build i2pd
         uses: openwrt/gh-action-sdk@main
@@ -263,7 +276,8 @@ jobs:
           FEEDNAME: action
           PACKAGES: i2pd
           INDEX: 1
-          PRIVATE_KEY: ${{ runner.temp }}/i2pd-apk-signing-key.pem
+          # gh-action-sdk expects the PEM key contents, not a filesystem path.
+          PRIVATE_KEY: ${{ secrets.APK_SIGNING_KEY }}
           NO_REFRESH_CHECK: 1
           NO_SHFMT_CHECK: 1
           BUILD_LOG: 1
@@ -281,12 +295,15 @@ jobs:
           test -n "$release"
 
           apk="$(find bin -type f -name "i2pd-${version}-*.apk" | head -n 1)"
-          adb="$(find bin -type f -name 'packages.adb' | head -n 1)"
-          pub="$(find bin -type f -name '*.pub.pem' | head -n 1)"
+          adb="$(find bin -type f -path '*/action/packages.adb' -print -quit)"
+          # The SDK signs packages.adb but does not reliably export a .pub.pem file.
+          # Use the public key derived from the same private key used by the SDK.
+          pub="$RUNNER_TEMP/i2pd-apk-signing-key.pub.pem"
 
           test -n "$apk"
           test -n "$adb"
           test -n "$pub"
+          test -s "$pub"
 
           mkdir -p "artifacts/release" "artifacts/feed/${{ matrix.arch }}"
 
@@ -303,7 +320,7 @@ jobs:
           echo "APK: artifacts/release/$output"
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: i2pd-${{ matrix.arch }}
           path: artifacts
@@ -321,7 +338,7 @@ jobs:
 
     steps:
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           path: artifacts
           pattern: i2pd-*
@@ -341,7 +358,16 @@ jobs:
           test "$found" -eq "$expected"
 
           for arch in $(echo '${{ needs.discover.outputs.matrix }}' | jq -r '.arch[]'); do
-            test -f "artifacts/feed/${arch}/packages.adb"
+            test -s "artifacts/feed/${arch}/packages.adb"
+            test -s "artifacts/feed/${arch}/i2pd-feed.pub.pem"
+          done
+
+          # Every architecture must publish the same trusted public key.
+          first_arch="$(echo '${{ needs.discover.outputs.matrix }}' | jq -r '.arch[0]')"
+          for arch in $(echo '${{ needs.discover.outputs.matrix }}' | jq -r '.arch[]'); do
+            cmp -s \
+              "artifacts/feed/${first_arch}/i2pd-feed.pub.pem" \
+              "artifacts/feed/${arch}/i2pd-feed.pub.pem"
           done
 
       - name: Create GitHub Release
