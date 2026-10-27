@@ -16,10 +16,12 @@ PKG_BUILD_DEPENDS:=boost
 
 include $(INCLUDE_DIR)/package.mk
 
+MAKE_FLAGS += USE_STATIC=yes
+
 define Package/i2pd
   SECTION:=net
   CATEGORY:=Network
-  DEPENDS:=+libopenssl +boost +boost-json +boost-url +boost-program_options +libatomic +zlib +ucode
+  DEPENDS:=+libopenssl +libatomic +zlib +ucode
   TITLE:=full-featured C++ implementation of I2P client
   URL:=https://github.com/PurpleI2P/i2pd
   USERID:=i2pd:i2pd
