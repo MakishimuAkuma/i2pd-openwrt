@@ -17,6 +17,7 @@ PKG_BUILD_DEPENDS:=boost
 include $(INCLUDE_DIR)/package.mk
 
 MAKE_FLAGS += USE_STATIC=yes
+MAKE_FLAGS += LIBDIR="$(STAGING_DIR)/usr/lib"
 
 define Package/i2pd
   SECTION:=net
