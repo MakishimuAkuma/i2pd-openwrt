@@ -33,8 +33,6 @@ define Package/i2pd/description
   I2P (Invisible Internet Protocol) is a universal anonymous network layer.
 endef
 
-TARGET_LDFLAGS += -latomic
-
 define Package/i2pd/conffiles
 /etc/config/i2pd
 /etc/i2pd/tunnels.d/*
