@@ -17,7 +17,8 @@ PKG_BUILD_DEPENDS:=boost
 include $(INCLUDE_DIR)/package.mk
 
 MAKE_FLAGS += USE_STATIC=yes
-MAKE_FLAGS += LIBDIR="$(STAGING_DIR)/usr/lib"
+MAKE_FLAGS += LIBDIR=$(STAGING_DIR)/usr/lib
+MAKE_FLAGS += LDLIBS="$(STAGING_DIR)/usr/lib/libboost_program_options.a $(STAGING_DIR)/usr/lib/libboost_json.a $(STAGING_DIR)/usr/lib/libboost_url.a $(STAGING_DIR)/usr/lib/libssl.a $(STAGING_DIR)/usr/lib/libcrypto.a $(STAGING_DIR)/usr/lib/libz.a -lpthread -ldl -latomic"
 
 define Package/i2pd
   SECTION:=net
