@@ -4,38 +4,39 @@ PKG_NAME:=i2pd
 PKG_VERSION:=3.0.0
 PKG_RELEASE:=1
 PKG_BUILD_PARALLEL:=1
+
 PKG_SOURCE:=$(PKG_VERSION).tar.gz
 PKG_SOURCE_URL:=https://github.com/PurpleI2P/i2pd/archive/refs/tags/
 PKG_SOURCE_SUBDIR:=i2pd-$(PKG_VERSION)
 PKG_HASH:=3bebc9567658944d388c382fbec61b7bc583dfa9982028b42b96eeb354f79bd3
+
 PKG_MAINTAINER:=David Yang <mmyangfl@gmail.com>
 PKG_LICENSE:=BSD-3-Clause
 PKG_LICENSE_FILES:=LICENSE
 PKG_CPE_ID:=cpe:/a:i2pd:i2pd
+
 PKG_BUILD_DEPENDS:=boost
 
 include $(INCLUDE_DIR)/package.mk
 
-MAKE_FLAGS += USE_STATIC=yes
-MAKE_FLAGS += LIBDIR=$(STAGING_DIR)/usr/lib
-MAKE_FLAGS += LDLIBS="$(STAGING_DIR)/usr/lib/libboost_program_options.a $(STAGING_DIR)/usr/lib/libboost_json.a $(STAGING_DIR)/usr/lib/libboost_url.a $(STAGING_DIR)/usr/lib/libssl.a $(STAGING_DIR)/usr/lib/libcrypto.a $(STAGING_DIR)/usr/lib/libz.a -lpthread -ldl -latomic"
-
 define Package/i2pd
-  SECTION:=net
-  CATEGORY:=Network
-  DEPENDS:=+libopenssl +libatomic +zlib +ucode
-  TITLE:=full-featured C++ implementation of I2P client
-  URL:=https://github.com/PurpleI2P/i2pd
-  USERID:=i2pd:i2pd
+	SECTION:=net
+	CATEGORY:=Network
+	DEPENDS:=+libopenssl +boost +boost-json +boost-url +boost-program_options +libatomic +zlib
+	TITLE:=full-featured C++ implementation of I2P client
+	URL:=https://github.com/PurpleI2P/i2pd
+	USERID:=i2pd:i2pd
 endef
 
 define Package/i2pd/description
-  I2P (Invisible Internet Protocol) is a universal anonymous network layer.
+	I2P (Invisible Internet Protocol) is a universal anonymous network layer. All communications over I2P are anonymous and end-to-end encrypted, participants don't reveal their real IP addresses.
 endef
 
+TARGET_LDFLAGS+=-latomic
+
 define Package/i2pd/conffiles
-/etc/config/i2pd
-/etc/i2pd/tunnels.d/*
+	/etc/config/i2pd
+	/etc/i2pd/tunnels.d/*
 endef
 
 define Package/i2pd/install

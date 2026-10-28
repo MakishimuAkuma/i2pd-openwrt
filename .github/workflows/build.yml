@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 env:
-  OPENWRT_VERSION: 25.12.5
+  OPENWRT_VERSION: 25.12.6
   FEED_BRANCH: gh-pages
   FEED_ROOT: 25.12
 
